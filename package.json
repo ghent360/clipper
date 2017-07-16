@@ -10,13 +10,13 @@
   "url": "http://www.angusj.com/delphi/clipper.php",
   "license": "SEE LICENSE IN license.txt",
   "devDependencies": {
-    "@types/assert": "0.0.31",
     "@types/benchmark": "^1.0.30",
     "@types/mocha": "^2.2.41",
     "@types/webassembly-js-api": "0.0.1",
     "assert": "^1.4.1",
     "benchmark": "^2.1.4",
     "mocha": "^3.4.2",
+    "ts-node": "^3.2.0",
     "typescript": "^2.4.1"
   }
 }
