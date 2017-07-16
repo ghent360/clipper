@@ -60,23 +60,23 @@
     i32.const 0
     i64.load
     i32.const 8
-    i64.load
+    i64.load32_u
     i64.shl
     i64.store)
-  (func (export "shr_s64")
+  (func (export "shrs64")
     i32.const 16
     i32.const 0
     i64.load
     i32.const 8
-    i64.load
+    i64.load32_u
     i64.shr_s
     i64.store)
-  (func (export "shr_u64")
+  (func (export "shru64")
     i32.const 16
     i32.const 0
     i64.load
     i32.const 8
-    i64.load
+    i64.load32_u
     i64.shr_u
     i64.store)
   (func (export "rotl64")
@@ -84,7 +84,7 @@
     i32.const 0
     i64.load
     i32.const 8
-    i64.load
+    i64.load32_u
     i64.rotl
     i64.store)
   (func (export "rotr64")
@@ -92,7 +92,7 @@
     i32.const 0
     i64.load
     i32.const 8
-    i64.load
+    i64.load32_u
     i64.rotr
     i64.store)
   (func (export "clz64")
@@ -107,7 +107,7 @@
     i64.load
     i64.ctz
     i64.store)
-  (func (export "lt_s64")
+  (func (export "lts64")
     i32.const 16
     i32.const 0
     i64.load
@@ -115,7 +115,7 @@
     i64.load
     i64.lt_s
     i32.store)
-  (func (export "lt_u64")
+  (func (export "ltu64")
     i32.const 16
     i32.const 0
     i64.load
@@ -123,7 +123,7 @@
     i64.load
     i64.lt_u
     i32.store)
-  (func (export "le_s64")
+  (func (export "les64")
     i32.const 16
     i32.const 0
     i64.load
@@ -131,7 +131,7 @@
     i64.load
     i64.le_s
     i32.store)
-  (func (export "le_u64")
+  (func (export "leu64")
     i32.const 16
     i32.const 0
     i64.load
@@ -139,7 +139,7 @@
     i64.load
     i64.le_u
     i32.store)
-  (func (export "gt_s64")
+  (func (export "gts64")
     i32.const 16
     i32.const 0
     i64.load
@@ -147,7 +147,7 @@
     i64.load
     i64.gt_s
     i32.store)
-  (func (export "gt_u64")
+  (func (export "gtu64")
     i32.const 16
     i32.const 0
     i64.load
@@ -155,7 +155,7 @@
     i64.load
     i64.gt_u
     i32.store)
-  (func (export "ge_s64")
+  (func (export "ges64")
     i32.const 16
     i32.const 0
     i64.load
@@ -163,7 +163,7 @@
     i64.load
     i64.ge_s
     i32.store)
-  (func (export "ge_u64")
+  (func (export "geu64")
     i32.const 16
     i32.const 0
     i64.load
@@ -171,4 +171,20 @@
     i64.load
     i64.ge_u
     i32.store)
+  (func (export "not64")
+    i32.const 16
+    i32.const 0
+    i64.load
+    i64.const 0xffffffffffffffff
+    i64.xor
+    i64.store)
+  (func (export "neg64")
+    i32.const 16
+    i32.const 0
+    i64.load
+    i64.const 0xffffffffffffffff
+    i64.xor
+    i64.const 1
+    i64.add
+    i64.store)
 )
