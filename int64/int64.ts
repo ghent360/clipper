@@ -1,6 +1,6 @@
 const TwoPow32: number = Math.pow(2, 32);
-const MaxValueAsDbl:number = Math.pow(2, 63);
-const MinValueAsDbl:number = -Math.pow(2, 63);
+const MaxValue64AsDbl:number = Math.pow(2, 63);
+const MinValue64AsDbl:number = -Math.pow(2, 63);
 
 export class Int64 {
     high:number;
@@ -38,11 +38,11 @@ export class Int64 {
     }
 
     public not():Int64 {
-        return Int64Impl.function64_64(this, "not64");
+        return LongIntImpl.function64_64(this, "not64");
     }
     
     public neg():Int64 {
-        return Int64Impl.function64_64(this, "neg64");
+        return LongIntImpl.function64_64(this, "neg64");
     }
     
     public negate():Int64 {
@@ -50,23 +50,23 @@ export class Int64 {
     }
     
     public and(other:Int64):Int64 {
-        return Int64Impl.function64_64_64(this, other, "and64");
+        return LongIntImpl.function64_64_64(this, other, "and64");
     }
     
     public or(other:Int64):Int64 {
-        return Int64Impl.function64_64_64(this, other, "or64");
+        return LongIntImpl.function64_64_64(this, other, "or64");
     }
     
     public xor(other:Int64):Int64 {
-        return Int64Impl.function64_64_64(this, other, "xor64");
+        return LongIntImpl.function64_64_64(this, other, "xor64");
     }
     
     public add(b: Int64): Int64 {
-        return Int64Impl.function64_64_64(this, b, "add64");
+        return LongIntImpl.function64_64_64(this, b, "add64");
     }
 
     public sub(b: Int64): Int64 {
-        return Int64Impl.function64_64_64(this, b, "sub64");
+        return LongIntImpl.function64_64_64(this, b, "sub64");
     }
 
     public subtract(b: Int64): Int64 {
@@ -74,7 +74,7 @@ export class Int64 {
     }
 
     public mul(b: Int64): Int64 {
-        return Int64Impl.function64_64_64(this, b, "mul64");
+        return LongIntImpl.function64_64_64(this, b, "mul64");
     }
 
     public multiply(b: Int64): Int64 {
@@ -82,7 +82,7 @@ export class Int64 {
     }
 
     public div(b: Int64): Int64 {
-        return Int64Impl.function64_64_64(this, b, "divs64");
+        return LongIntImpl.function64_64_64(this, b, "divs64");
     }
 
     public divide(b: Int64): Int64 {
@@ -90,7 +90,7 @@ export class Int64 {
     }
    
     public mod(b: Int64): Int64 {
-        return Int64Impl.function64_64_64(this, b, "rems64");
+        return LongIntImpl.function64_64_64(this, b, "rems64");
     }
 
     public modulo(b: Int64): Int64 {
@@ -98,31 +98,31 @@ export class Int64 {
     }
 
     public shr(b:number): Int64 {
-        return Int64Impl.function64_32_64(this, b, "shrs64");
+        return LongIntImpl.function64_32_64(this, b, "shrs64");
     }
 
     public shrUnsigned(b: number): Int64 {
-        return Int64Impl.function64_32_64(this, b, "shru64");
+        return LongIntImpl.function64_32_64(this, b, "shru64");
     }
 
     public shl(b: number): Int64 {
-        return Int64Impl.function64_32_64(this, b, "shl64");
+        return LongIntImpl.function64_32_64(this, b, "shl64");
     }
 
     public rotr(b: number): Int64 {
-        return Int64Impl.function64_32_64(this, b, "rotr64");
+        return LongIntImpl.function64_32_64(this, b, "rotr64");
     }
 
     public rotl(b: number): Int64 {
-        return Int64Impl.function64_32_64(this, b, "rotl64");
+        return LongIntImpl.function64_32_64(this, b, "rotl64");
     }
 
     public clz(): Int64 {
-        return Int64Impl.function64_64(this, "clz64");
+        return LongIntImpl.function64_64(this, "clz64");
     }
 
     public ctz(): Int64 {
-        return Int64Impl.function64_64(this, "ctz64");
+        return LongIntImpl.function64_64(this, "ctz64");
     }
 
     public compare(other:Int64):number {
@@ -148,28 +148,28 @@ export class Int64 {
     }
     
     public lessThan(other:Int64):boolean {
-        return Int64Impl.function2_32(this, other, "lts64") != 0;
+        return LongIntImpl.function64_64_32(this, other, "lts64") != 0;
     }
 
     public lessThanOrEqual(other:Int64):boolean {
-        return Int64Impl.function2_32(this, other, "les64") != 0;
+        return LongIntImpl.function64_64_32(this, other, "les64") != 0;
     }
 
     public greaterThan(other:Int64):boolean {
-        return Int64Impl.function2_32(this, other, "gts64") != 0;
+        return LongIntImpl.function64_64_32(this, other, "gts64") != 0;
     }
 
     public greaterThanOrEqual(other:Int64):boolean {
-        return Int64Impl.function2_32(this, other, "ges64") != 0;
+        return LongIntImpl.function64_64_32(this, other, "ges64") != 0;
     }
     
     public static fromNumber(value:number):Int64 {
         if (isNaN(value)) {
             return new Int64(0, 0);
-        } else if (value < MinValueAsDbl) {
-            return MinValue;
-        } else if (value > MaxValueAsDbl) {
-            return MaxValue;
+        } else if (value < MinValue64AsDbl) {
+            return MinValue64;
+        } else if (value > MaxValue64AsDbl) {
+            return MaxValue64;
         } else if (value < 0) {
             return this.fromNumber(-value).neg();
         } else {
@@ -239,7 +239,7 @@ export class Int64 {
         }
 
         if (this.isNegative()) {
-            if (this.equals(MinValue)) {
+            if (this.equals(MinValue64)) {
                 // We need to change the Long value before it can be negated, so we remove
                 // the bottom-most digit in this base and then recurse to do the rest.
                 let radixLong = Int64.fromNumber(radix);
@@ -278,69 +278,138 @@ export class Int64 {
     }
 
     public static init():Promise<void> {
-        return Int64Impl.init();
+        return LongIntImpl.init();
     }
 }
 
-const MinValue:Int64 = new Int64(0, 0x80000000);
-const MaxValue:Int64 = new Int64(0xffffffff, 0x7fffffff);
+export class Int128 {
+    d0:number;
+    d1:number;
+    d2:number;
+    d3:number;
 
-class Int64Impl {
+    constructor(d0: number, d1: number, d2: number, d3: number) {
+        this.d0 = d0 | 0;
+        this.d1 = d1 | 0;
+        this.d2 = d2 | 0;
+        this.d3 = d3 | 0;
+    }
+
+    public isZero():boolean {
+        return this.d3 == 0 
+            && this.d2 == 0
+            && this.d1 == 0
+            && this.d0 == 0;
+    }
+
+    public isNegative():boolean {
+        return this.d3 < 0;
+    }
+
+    public isOdd():boolean {
+        return (this.d0 & 1) == 1;
+    }
+
+    public equals(other:Int128):boolean {
+        return (this.d3 == other.d3) 
+            && (this.d2 == other.d2)
+            && (this.d1 == other.d1)
+            && (this.d0 == other.d0);
+    }
+
+    public notEquals(other:Int128):boolean {
+        return (this.d3 != other.d3)
+            || (this.d2 != other.d2)
+            || (this.d1 != other.d1)
+            || (this.d0 != other.d0);
+    }
+
+    public add(b: Int128): Int128 {
+        return LongIntImpl.function128_128_128(this, b, "add128");
+    }
+}
+
+const MinValue64:Int64 = new Int64(0, 0x80000000);
+const MaxValue64:Int64 = new Int64(0xffffffff, 0x7fffffff);
+
+class LongIntImpl {
     private static instance: WebAssembly.Instance;
     private static mem32: Uint32Array;
 
+    private static setArg128(n128: Int128, offset: number): void {
+        LongIntImpl.mem32[offset] = n128.d0;
+        LongIntImpl.mem32[offset + 1] = n128.d1;
+        LongIntImpl.mem32[offset + 2] = n128.d2;
+        LongIntImpl.mem32[offset + 3] = n128.d3;
+    }
+    
     private static setArg64(n64: Int64, offset: number): void {
-        Int64Impl.mem32[offset] = n64.low;
-        Int64Impl.mem32[offset + 1] = n64.high;
+        LongIntImpl.mem32[offset] = n64.low;
+        LongIntImpl.mem32[offset + 1] = n64.high;
     }
 
     private static setArg32(n32: number, offset: number): void {
-        Int64Impl.mem32[offset] = n32|0;
+        LongIntImpl.mem32[offset] = n32|0;
     }
 
     public static function64_32_64(a: Int64, b: number, name: string): Int64 {
-        Int64Impl.setArg64(a, 0);
-        Int64Impl.setArg32(b, 2);
-        Int64Impl.instance.exports[name]();
+        LongIntImpl.setArg64(a, 0);
+        LongIntImpl.setArg32(b, 2);
+        LongIntImpl.instance.exports[name]();
         return this.result64();
     }
 
     public static function64_64_64(a: Int64, b: Int64, name: string): Int64 {
-        Int64Impl.setArg64(a, 0);
-        Int64Impl.setArg64(b, 2);
-        Int64Impl.instance.exports[name]();
+        LongIntImpl.setArg64(a, 0);
+        LongIntImpl.setArg64(b, 2);
+        LongIntImpl.instance.exports[name]();
         return this.result64();
     }
 
     public static function64_64(a: Int64, name: string): Int64 {
-        Int64Impl.setArg64(a, 0);
-        Int64Impl.instance.exports[name]();
+        LongIntImpl.setArg64(a, 0);
+        LongIntImpl.instance.exports[name]();
         return this.result64();
     }
 
-    protected static result64(): Int64 {
-        return new Int64(Int64Impl.mem32[4], Int64Impl.mem32[5]);
-    }
-
-    public static function2_32(a: Int64, b: Int64, name: string): number {
-        Int64Impl.setArg64(a, 0);
-        Int64Impl.setArg64(b, 2);
-        Int64Impl.instance.exports[name]();
+    public static function64_64_32(a: Int64, b: Int64, name: string): number {
+        LongIntImpl.setArg64(a, 0);
+        LongIntImpl.setArg64(b, 2);
+        LongIntImpl.instance.exports[name]();
         return this.result32();
     }
 
+    public static function128_128_128(a: Int128, b: Int128, name: string): Int128 {
+        LongIntImpl.setArg128(a, 0);
+        LongIntImpl.setArg128(b, 4);
+        LongIntImpl.instance.exports[name]();
+        return this.result128();
+    }
+
+    protected static result128(): Int128 {
+        return new Int128(
+            LongIntImpl.mem32[8],
+            LongIntImpl.mem32[9],
+            LongIntImpl.mem32[10],
+            LongIntImpl.mem32[11]);
+    }
+    
+    protected static result64(): Int64 {
+        return new Int64(LongIntImpl.mem32[8], LongIntImpl.mem32[9]);
+    }
+
     protected static result32(): number {
-        return Int64Impl.mem32[4];
+        return LongIntImpl.mem32[8];
     }
 
     public static init(): Promise<void> {
-        if (Int64Impl.instance != null) {
+        if (LongIntImpl.instance != null) {
             return Promise.resolve();
         }
-        return Int64Impl.fetchAndInstantiate('int64.wasm')
+        return LongIntImpl.fetchAndInstantiate('int64.wasm')
             .then(instance => {
-                Int64Impl.instance = instance;
-                Int64Impl.mem32 = new Uint32Array(instance.exports.mem.buffer);
+                LongIntImpl.instance = instance;
+                LongIntImpl.mem32 = new Uint32Array(instance.exports.mem.buffer);
                 return;
             });
     }

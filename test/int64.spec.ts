@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import {Int64} from "../int64/int64";
+import {Int64, Int128} from "../int64/int64";
 
 const tabu:Int64[] = [
     Int64.fromInt(0),
@@ -159,5 +159,26 @@ describe("Int64 tests", () => {
         assert.deepEqual(tst.divide(divisor), new Int64(0x03F4FEC5, 0));
         assert.deepEqual(tst.modulo(divisor), new Int64(0x99BA0114, 0));
         divTest();
+    });
+});
+
+function dmp128(r:Int128, name:string): void {
+    console.log("%s(%s, %s, %s, %s)", 
+        name,
+        (r.d0 >>> 0).toString(16), 
+        (r.d1 >>> 0).toString(16), 
+        (r.d2 >>> 0).toString(16), 
+        (r.d3 >>> 0).toString(16));
+}
+
+describe("Int128 tests", () => {
+    it("load asm code", () => Int64.init());
+    it("Add test", () => {
+        let one = new Int128(1, 0, 0, 0);
+        let carryTest = new Int128(0xffffffff, 0xffffffff, 0xff, 0);
+        let r = one.add(carryTest);
+        dmp128(one, 'one');
+        dmp128(carryTest, 'carryTest');
+        dmp128(r, 'r');
     });
 });
