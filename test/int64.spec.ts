@@ -162,7 +162,7 @@ describe("Int64 tests", () => {
     });
 });
 
-function dmp128(r:Int128, name:string): void {
+function dump128(r:Int128, name:string): void {
     console.log("%s(%s, %s, %s, %s)", 
         name,
         (r.d0 >>> 0).toString(16), 
@@ -191,5 +191,10 @@ describe("Int128 tests", () => {
         assert.deepEqual(zero.negate(), zero);
         assert.deepEqual(negOne.negate(), one);
         assert.deepEqual(negOne.add(one), zero);
+    });
+    it("Mutliply tests", () => {
+        let carryTest = new Int128(0xffffffff, 0x7fffffff, 0, 0);
+        let r = carryTest.mul(carryTest);
+        assert.deepEqual(r, new Int128(1, 0, 0xffffffff, 0x3fffffff));
     });
 });
