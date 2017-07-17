@@ -295,6 +295,10 @@ export class Int128 {
         this.d3 = d3 | 0;
     }
 
+    public clone():Int128 {
+        return new Int128(this.d0, this.d1, this.d2, this.d3);
+    }
+
     public isZero():boolean {
         return this.d3 == 0 
             && this.d2 == 0
@@ -336,6 +340,18 @@ export class Int128 {
         return this.neg();
     }
 
+    public and(b: Int128): Int128 {
+        return LongIntImpl.function128_128_128(this, b, "and128");
+    }
+
+    public or(b: Int128): Int128 {
+        return LongIntImpl.function128_128_128(this, b, "or128");
+    }
+
+    public xor(b: Int128): Int128 {
+        return LongIntImpl.function128_128_128(this, b, "xor128");
+    }
+
     public add(b: Int128): Int128 {
         return LongIntImpl.function128_128_128(this, b, "add128");
     }
@@ -348,18 +364,49 @@ export class Int128 {
         return this.sub(b);
     }
 
+    public compare(other:Int128):number {
+        if (this.equals(other)) {
+            return 0;
+        }
+
+        let aNeg = this.isNegative();
+        let bNeg = other.isNegative();
+        if (aNeg && !bNeg) {
+            return -1;
+        }
+        if (!aNeg && bNeg) {
+            return 1;
+        }
+
+        // at this point, the signs are the same, so subtraction will not overflow
+        if (this.sub(other).isNegative()) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+
+    public lessThan(b:Int128):boolean {
+        return this.compare(b) < 0;
+    }
+
+    public lessThanOrEqual(b:Int128):boolean {
+        return this.compare(b) <= 0;
+    }
+
+    public greaterThan(b:Int128):boolean {
+        return this.compare(b) > 0;
+    }
+
+    public greaterThanOrEqual(b:Int128):boolean {
+        return this.compare(b) >= 0;
+    }
+
     public mul(b: Int128): Int128 {
         if (this.isZero() || b.isZero()) {
             return new Int128(0, 0, 0, 0);
         }
 
-/*
-        if (this.equals(MinValue128)) {
-            return b.isOdd() ? MinValue128 : new Int128(0, 0, 0, 0);
-        } else if (b.equals(MinValue128)) {
-            return this.isOdd() ? MinValue128 : new Int128(0, 0, 0, 0);
-        }
-*/
         if (this.isNegative()) {
             if (b.isNegative()) {
                 return this.neg().mul(b.neg());
@@ -375,6 +422,108 @@ export class Int128 {
 
     public multiply(b: Int128): Int128 {
         return this.mul(b);
+    }
+
+    public shiftLeft(numBits:number):Int128 {
+        numBits &= 127;
+        if (numBits == 0) {
+            return this.clone();
+        } else {
+            let value = this.clone();
+            if (numBits >= 96) {
+                numBits -= 96
+                return new Int128(0, 0, 0, this.d0 << numBits);
+            }
+            if (numBits >= 64) {
+                numBits -= 64;
+                return new Int128(
+                    0,
+                    0,
+                    this.d0 << numBits,
+                    this.d1 << numBits | this.d0 >>> (32 - numBits));
+            }
+            if (numBits >= 32) {
+                numBits -= 32;
+                return new Int128(
+                    0,
+                    this.d0 << numBits,
+                    this.d1 << numBits | this.d0 >>> (32 - numBits),
+                    this.d2 << numBits | this.d1 >>> (32 - numBits));
+            }
+            return new Int128(
+                this.d0 << numBits,
+                this.d1 << numBits | this.d0 >>> (32 - numBits),
+                this.d2 << numBits | this.d1 >>> (32 - numBits),
+                this.d3 << numBits | this.d2 >>> (32 - numBits));
+        }
+    }
+
+    public shiftRight(numBits:number):Int128 {
+        numBits &= 127;
+        if (numBits == 0) {
+            return this.clone();
+        } else {
+            let value = this.clone();
+            if (numBits >= 96) {
+                numBits -= 96
+                return new Int128(this.d3 >> numBits, 0, 0, 0);
+            }
+            if (numBits >= 64) {
+                numBits -= 64;
+                return new Int128(
+                    this.d3 >> numBits | this.d2 << (32 - numBits),
+                    this.d3 >> numBits,
+                    0,
+                    0);
+            }
+            if (numBits >= 32) {
+                numBits -= 32;
+                return new Int128(
+                    this.d2 >>> numBits | this.d1 << (32 - numBits),
+                    this.d3 >> numBits | this.d2 << (32 - numBits),
+                    this.d3 >> numBits,
+                    0);
+            }
+            return new Int128(
+                this.d1 >>> numBits | this.d0 << (32 - numBits),
+                this.d2 >>> numBits | this.d1 << (32 - numBits),
+                this.d3 >> numBits | this.d2 << (32 - numBits),
+                this.d3 >> numBits);
+        }
+    }
+
+    public shiftRightUnsigned(numBits:number):Int128 {
+        numBits &= 127;
+        if (numBits == 0) {
+            return this.clone();
+        } else {
+            let value = this.clone();
+            if (numBits >= 96) {
+                numBits -= 96
+                return new Int128(this.d3 >>> numBits, 0, 0, 0);
+            }
+            if (numBits >= 64) {
+                numBits -= 64;
+                return new Int128(
+                    this.d3 >>> numBits | this.d2 << (32 - numBits),
+                    this.d3 >>> numBits,
+                    0,
+                    0);
+            }
+            if (numBits >= 32) {
+                numBits -= 32;
+                return new Int128(
+                    this.d2 >>> numBits | this.d1 << (32 - numBits),
+                    this.d3 >>> numBits | this.d2 << (32 - numBits),
+                    this.d3 >>> numBits,
+                    0);
+            }
+            return new Int128(
+                this.d1 >>> numBits | this.d0 << (32 - numBits),
+                this.d2 >>> numBits | this.d1 << (32 - numBits),
+                this.d3 >>> numBits | this.d2 << (32 - numBits),
+                this.d3 >>> numBits);
+        }
     }
 }
 

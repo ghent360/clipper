@@ -555,4 +555,52 @@
     i32.const 44
     get_local $r3
     i64.store32)
+  (func (export "and128")
+    i32.const 32
+    i32.const 0
+    i64.load
+    i32.const 16
+    i64.load
+    i64.and
+    i64.store
+
+    i32.const 40
+    i32.const 8
+    i64.load
+    i32.const 24
+    i64.load
+    i64.and
+    i64.store)
+  (func (export "or128")
+    i32.const 32
+    i32.const 0
+    i64.load
+    i32.const 16
+    i64.load
+    i64.or
+    i64.store
+
+    i32.const 40
+    i32.const 8
+    i64.load
+    i32.const 24
+    i64.load
+    i64.or
+    i64.store)
+  (func (export "xor128")
+    i32.const 32
+    i32.const 0
+    i64.load
+    i32.const 16
+    i64.load
+    i64.xor
+    i64.store
+
+    i32.const 40
+    i32.const 8
+    i64.load
+    i32.const 24
+    i64.load
+    i64.xor
+    i64.store)
 )

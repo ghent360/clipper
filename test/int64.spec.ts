@@ -173,14 +173,23 @@ function dmp128(r:Int128, name:string): void {
 
 describe("Int128 tests", () => {
     it("load asm code", () => Int64.init());
-    it("Add test", () => {
+    it("Add/Subtract test", () => {
         let one = new Int128(1, 0, 0, 0);
         let carryTest = new Int128(0xffffffff, 0xffffffff, 0xff, 0);
         let r = one.add(carryTest);
-        dmp128(r, 'r');
+        assert.deepEqual(r, new Int128(0, 0, 0x100, 0));
         let r2 = r.subtract(carryTest);
         let r3 = r.subtract(one);
-        dmp128(r2, 'r2');
-        dmp128(r3, 'r3');
+        assert.deepEqual(r2, one);
+        assert.deepEqual(r3, carryTest);
+    });
+    it("Negate test", () => {
+        let zero = new Int128(0, 0, 0, 0);
+        let one = new Int128(1, 0, 0, 0);
+        let negOne = one.negate();
+        assert.deepEqual(one.add(negOne), zero);
+        assert.deepEqual(zero.negate(), zero);
+        assert.deepEqual(negOne.negate(), one);
+        assert.deepEqual(negOne.add(one), zero);
     });
 });
