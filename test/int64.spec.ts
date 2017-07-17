@@ -177,8 +177,10 @@ describe("Int128 tests", () => {
         let one = new Int128(1, 0, 0, 0);
         let carryTest = new Int128(0xffffffff, 0xffffffff, 0xff, 0);
         let r = one.add(carryTest);
-        dmp128(one, 'one');
-        dmp128(carryTest, 'carryTest');
         dmp128(r, 'r');
+        let r2 = r.subtract(carryTest);
+        let r3 = r.subtract(one);
+        dmp128(r2, 'r2');
+        dmp128(r3, 'r3');
     });
 });

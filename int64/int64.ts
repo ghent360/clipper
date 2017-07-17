@@ -324,13 +324,64 @@ export class Int128 {
             || (this.d0 != other.d0);
     }
 
+    public not():Int128 {
+        return LongIntImpl.function128_128(this, "not128");
+    }
+
+    public neg():Int128 {
+        return LongIntImpl.function128_128(this, "neg128");
+    }
+
+    public negate():Int128 {
+        return this.neg();
+    }
+
     public add(b: Int128): Int128 {
         return LongIntImpl.function128_128_128(this, b, "add128");
+    }
+
+    public sub(b: Int128): Int128 {
+        return LongIntImpl.function128_128_128(this, b, "sub128");
+    }
+
+    public subtract(b: Int128): Int128 {
+        return this.sub(b);
+    }
+
+    public mul(b: Int128): Int128 {
+        if (this.isZero() || b.isZero()) {
+            return new Int128(0, 0, 0, 0);
+        }
+
+/*
+        if (this.equals(MinValue128)) {
+            return b.isOdd() ? MinValue128 : new Int128(0, 0, 0, 0);
+        } else if (b.equals(MinValue128)) {
+            return this.isOdd() ? MinValue128 : new Int128(0, 0, 0, 0);
+        }
+*/
+        if (this.isNegative()) {
+            if (b.isNegative()) {
+                return this.neg().mul(b.neg());
+            } else {
+                return this.neg().mul(b).neg();
+            }
+        } else if (b.isNegative()) {
+            return this.mul(b.neg()).neg();
+        }
+
+        return LongIntImpl.function128_128_128(this, b, "mul128");
+    }
+
+    public multiply(b: Int128): Int128 {
+        return this.mul(b);
     }
 }
 
 const MinValue64:Int64 = new Int64(0, 0x80000000);
 const MaxValue64:Int64 = new Int64(0xffffffff, 0x7fffffff);
+const MinValue128:Int128 = new Int128(0, 0, 0, 0x80000000);
+const MaxValue128:Int128 = new Int128(0xffffffff, 0xffffffff, 0xffffffff, 0x7fffffff);
 
 class LongIntImpl {
     private static instance: WebAssembly.Instance;
@@ -382,6 +433,12 @@ class LongIntImpl {
     public static function128_128_128(a: Int128, b: Int128, name: string): Int128 {
         LongIntImpl.setArg128(a, 0);
         LongIntImpl.setArg128(b, 4);
+        LongIntImpl.instance.exports[name]();
+        return this.result128();
+    }
+
+    public static function128_128(a: Int128, name: string): Int128 {
+        LongIntImpl.setArg128(a, 0);
         LongIntImpl.instance.exports[name]();
         return this.result128();
     }
