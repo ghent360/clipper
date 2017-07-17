@@ -1,4 +1,6 @@
 const TwoPow32: number = Math.pow(2, 32);
+const TwoPow64: number = Math.pow(2, 64);
+const TwoPow96: number = Math.pow(2, 96);
 const MaxValue64AsDbl:number = Math.pow(2, 63);
 const MinValue64AsDbl:number = -Math.pow(2, 63);
 
@@ -524,6 +526,13 @@ export class Int128 {
                 this.d3 >>> numBits | this.d2 << (32 - numBits),
                 this.d3 >>> numBits);
         }
+    }
+
+    public toNumber():number {
+        return (this.d0 >>> 0)
+            + (this.d1 >>> 0) * TwoPow32
+            + (this.d2 >>> 0) * TwoPow64
+            + (this.d3 >>> 0) * TwoPow96;
     }
 }
 
