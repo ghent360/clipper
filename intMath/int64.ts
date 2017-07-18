@@ -3,13 +3,15 @@ const TwoPow64: number = Math.pow(2, 64);
 const TwoPow96: number = Math.pow(2, 96);
 const MaxValue64AsDbl:number = Math.pow(2, 63);
 const MinValue64AsDbl:number = -Math.pow(2, 63);
+const MaxValue128AsDbl:number = Math.pow(2, 127);
+const MinValue128AsDbl:number = -Math.pow(2, 127);
 
 export class Int64 {
     high:number;
     low:number;
 
     constructor(low: number, high: number) {
-        this.low = low | 0;
+        this.low = low >>> 0;
         this.high = high | 0;
     }
 
@@ -23,6 +25,11 @@ export class Int64 {
 
     public isNegative():boolean {
         return this.high < 0;
+    }
+
+    public isPositive():boolean {
+        return this.high > 0 
+            || (this.high == 0 && this.low != 0);
     }
 
     public isOdd():boolean {
@@ -279,6 +286,14 @@ export class Int64 {
         }
     }
 
+    public static Swap(one:Int64, other:Int64):void {
+        let tmp = one.clone();
+        one.low = other.low;
+        one.high = other.high;
+        other.low = tmp.low;
+        other.high = tmp.high;
+    }
+
     public static init():Promise<void> {
         return LongIntImpl.init();
     }
@@ -291,9 +306,9 @@ export class Int128 {
     d3:number;
 
     constructor(d0: number, d1: number, d2: number, d3: number) {
-        this.d0 = d0 | 0;
-        this.d1 = d1 | 0;
-        this.d2 = d2 | 0;
+        this.d0 = d0 >>> 0;
+        this.d1 = d1 >>> 0;
+        this.d2 = d2 >>> 0;
         this.d3 = d3 | 0;
     }
 
@@ -310,6 +325,11 @@ export class Int128 {
 
     public isNegative():boolean {
         return this.d3 < 0;
+    }
+
+    public isPositive():boolean {
+        return this.d3 > 0 
+            || (this.d3 == 0 && (this.d2 != 0 || this.d1 != 0 || this.d0 != 0));
     }
 
     public isOdd():boolean {
@@ -533,6 +553,57 @@ export class Int128 {
             + (this.d1 >>> 0) * TwoPow32
             + (this.d2 >>> 0) * TwoPow64
             + (this.d3 >>> 0) * TwoPow96;
+    }
+
+    public static fromInt64(v:Int64):Int128 {
+        let signExtent = v.high < 0 ? -1 : 0;
+        return new Int128(v.low, v.high, signExtent, signExtent);
+    }
+
+    public static fromNumber(value:number):Int128 {
+        if (isNaN(value)) {
+            return new Int128(0, 0, 0, 0);
+        } else if (value < MinValue128AsDbl) {
+            return MinValue128;
+        } else if (value > MaxValue128AsDbl) {
+            return MaxValue128;
+        } else if (value < 0) {
+            return this.fromNumber(-value).neg();
+        } else {
+            let d0 = value & TwoPow32;
+            value /= TwoPow32;
+            let d1 = value & TwoPow32;
+            value /= TwoPow32;
+            let d2 = value & TwoPow32;
+            value /= TwoPow32;
+            let d3 = value;
+            return new Int128(d0, d1, d2, d3);
+        }
+    }
+
+    public static fromInt(value:number):Int128 {
+        let intValue = value | 0;
+        if (!(intValue === value)) {
+            throw new Error("Value is not an int value");
+        }
+        let signExtent = value < 0 ? -1 : 0;
+        return new Int128(intValue, signExtent, signExtent, signExtent);
+    }
+
+    public static mul64(a:Int64, b:Int64):Int128 {
+        return Int128.fromInt64(a).mul(Int128.fromInt64(b));
+    }
+
+    public static Swap(one:Int128, other:Int128):void {
+        let tmp = one.clone();
+        one.d0 = other.d0;
+        one.d1 = other.d1;
+        one.d2 = other.d2;
+        one.d3 = other.d3;
+        other.d0 = tmp.d0;
+        other.d1 = tmp.d1;
+        other.d2 = tmp.d2;
+        other.d3 = tmp.d3;
     }
 }
 
