@@ -268,6 +268,9 @@ const Unassigned:number = -1;
 const tolerance:number = 1.0E-20;
 const loRange = new Int64(0x3FFFFFFF, 0);
 const hiRange = new Int64(0xFFFFFFFF, 0x3FFFFFFF); 
+const ioReverseSolution:number = 1;
+const ioStrictlySimple:number = 2;
+const ioPreserveCollinear:number = 4;
 
 function near_zero(val:number):boolean {
     return Math.abs(val) < tolerance;
@@ -451,6 +454,23 @@ function ReverseHorizontal(e:TEdge):void {
     //progression of the bounds - ie so their xbots will align with the
     //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
     Int64.Swap(e.Top.x, e.Bot.x);
+}
+
+function TopX(edge:TEdge, currentY:Int64):Int64 {
+    if (currentY.equals(edge.Top.y)) {
+        return edge.Top.x;
+    }
+    return edge.Bot.x + Math.round(edge.Dx * currentY.sub(edge.Bot.y).toNumber());
+}
+
+function E2InsertsBeforeE1(e1:TEdge, e2:TEdge):boolean {
+    if (e2.Curr.x.equals(e1.Curr.x)) {
+        if (e2.Top.y.greaterThan(e1.Top.y)) {
+            return e2.Top.x.lessThan(TopX(e1, e2.Top.y));
+        }
+        return e1.Top.x.greaterThan(TopX(e2, e1.Top.y));
+    }
+    return e2.Curr.x.lessThan(e1.Curr.x);
 }
 
 class ClipperBase {
@@ -1015,461 +1035,405 @@ class ClipperBase {
 
 export class Clipper extends ClipperBase {
       //InitOptions that can be passed to the constructor ...
-      public const int ioReverseSolution = 1;
-      public const int ioStrictlySimple = 2;
-      public const int ioPreserveCollinear = 4;
+    m_ClipType:ClipType;
+    m_Maxima:Maxima;
+    m_SortedEdges:TEdge;
+    m_IntersectList:Array<IntersectNode>;
+    m_ExecuteLocked:boolean;
+    m_ClipFillType:PolyFillType;
+    m_SubjFillType:PolyFillType;
+    m_Joins:Array<Join>;
+    m_GhostJoins:Array<Join>;
+    m_UsingPolyTree:boolean;
 
-      private ClipType m_ClipType;
-      private Maxima m_Maxima;
-      private TEdge m_SortedEdges;
-      private List<IntersectNode> m_IntersectList;
-      IComparer<IntersectNode> m_IntersectNodeComparer;
-      private bool m_ExecuteLocked;
-      private PolyFillType m_ClipFillType;
-      private PolyFillType m_SubjFillType;
-      private List<Join> m_Joins;
-      private List<Join> m_GhostJoins;
-      private bool m_UsingPolyTree;
-#if use_xyz
-      public delegate void ZFillCallback(IntPoint bot1, IntPoint top1, 
-        IntPoint bot2, IntPoint top2, ref IntPoint pt);
-      public ZFillCallback ZFillFunction { get; set; }
-#endif
-      public Clipper(int InitOptions = 0): base() //constructor
-      {
-          m_Scanbeam = null;
-          m_Maxima = null;
-          m_ActiveEdges = null;
-          m_SortedEdges = null;
-          m_IntersectList = new List<IntersectNode>();
-          m_IntersectNodeComparer = new MyIntersectNodeSort();
-          m_ExecuteLocked = false;
-          m_UsingPolyTree = false;
-          m_PolyOuts = new List<OutRec>();
-          m_Joins = new List<Join>();
-          m_GhostJoins = new List<Join>();
-          ReverseSolution = (ioReverseSolution & InitOptions) != 0;
-          StrictlySimple = (ioStrictlySimple & InitOptions) != 0;
-          PreserveCollinear = (ioPreserveCollinear & InitOptions) != 0;
-#if use_xyz
-          ZFillFunction = null;
-#endif
-      }
-      
+    ReverseSolution:boolean;      
+    StrictlySimple:boolean;
 
-      private void InsertMaxima(cInt X)
-      {
-          //double-linked list: sorted ascending, ignoring dups.
-          Maxima newMax = new Maxima();
-          newMax.X = X;
-          if (m_Maxima == null)
-          {
-              m_Maxima = newMax;
-              m_Maxima.Next = null;
-              m_Maxima.Prev = null;
-          }
-          else if (X < m_Maxima.X)
-          {
-              newMax.Next = m_Maxima;
-              newMax.Prev = null;
-              m_Maxima = newMax;
-          }
-          else
-          {
-              Maxima m = m_Maxima;
-              while (m.Next != null && (X >= m.Next.X)) m = m.Next;
-              if (X == m.X) return; //ie ignores duplicates (& CG to clean up newMax)
-              //insert newMax between m and m.Next ...
-              newMax.Next = m.Next;
-              newMax.Prev = m;
-              if (m.Next != null) m.Next.Prev = newMax;
-              m.Next = newMax;
-          }
-      }
-      
+    constructor(InitOptions:number = 0) {
+        this.m_Scanbeam = null;
+        this.m_Maxima = null;
+        this.m_ActiveEdges = null;
+        this.m_SortedEdges = null;
+        this.m_IntersectList = new Array<IntersectNode>();
+        this.m_ExecuteLocked = false;
+        this.m_UsingPolyTree = false;
+        this.m_PolyOuts = new Array<OutRec>();
+        this.m_Joins = new Array<Join>();
+        this.m_GhostJoins = new Array<Join>();
+        this.ReverseSolution = (ioReverseSolution & InitOptions) != 0;
+        this.StrictlySimple = (ioStrictlySimple & InitOptions) != 0;
+        this.PreserveCollinear = (ioPreserveCollinear & InitOptions) != 0;
+    }
 
-      public bool ReverseSolution
-      {
-        get;
-        set;
-      }
-      
+    private InsertMaxima(X:Int64):void {
+        //double-linked list: sorted ascending, ignoring dups.
+        let newMax = new Maxima();
+        newMax.X = X;
+        if (this.m_Maxima == null) {
+            this.m_Maxima = newMax;
+            this.m_Maxima.Next = null;
+            this.m_Maxima.Prev = null;
+        } else if (X.lessThan(m_Maxima.X)) {
+            newMax.Next = this.m_Maxima;
+            newMax.Prev = null;
+            this.m_Maxima = newMax;
+        } else {
+            let m = this.m_Maxima;
+            while (m.Next != null && X.greaterThanOrEqual(m.Next.X)) {
+                m = m.Next;
+            }
+            if (X.equals(m.X)) {
+                return; //ie ignores duplicates (& CG to clean up newMax)
+            }
+            //insert newMax between m and m.Next ...
+            newMax.Next = m.Next;
+            newMax.Prev = m;
+            if (m.Next != null) {
+                m.Next.Prev = newMax;
+            }
+            m.Next = newMax;
+        }
+    }
 
-      public bool StrictlySimple
-      {
-        get; 
-        set;
-      }
-      
-       
-      public bool Execute(ClipType clipType, Paths solution, 
-          PolyFillType FillType = PolyFillType.pftEvenOdd)
-      {
-          return Execute(clipType, solution, FillType, FillType);
-      }
-      
+    public Execute(clipType:ClipType, solution:Paths, 
+        fillType:PolyFillType = PolyFillType.pftEvenOdd):boolean {
+        return Execute(clipType, solution, fillType, fillType);
+    }
 
-      public bool Execute(ClipType clipType, PolyTree polytree,
-          PolyFillType FillType = PolyFillType.pftEvenOdd)
-      {
-          return Execute(clipType, polytree, FillType, FillType);
-      }
-      
+    public Execute(clipType:ClipType, polytree:PolyTree,
+        FillType:PolyFillType = PolyFillType.pftEvenOdd):boolean {
+        return Execute(clipType, polytree, FillType, FillType);
+    }
 
-      public bool Execute(ClipType clipType, Paths solution,
-          PolyFillType subjFillType, PolyFillType clipFillType)
-      {
-          if (m_ExecuteLocked) return false;
-          if (m_HasOpenPaths) throw 
-            new ClipperException("Error: PolyTree struct is needed for open path clipping.");
+    public Execute(clipType:ClipType, solution:Paths,
+        subjFillType:PolyFillType, clipFillType:PolyFillType):boolean {
+        if (this.m_ExecuteLocked) {
+          return false;
+        }
+        if (this.m_HasOpenPaths) {
+            throw new Error("Error: PolyTree struct is needed for open path clipping.");
+        }
 
-          m_ExecuteLocked = true;
-          solution.Clear();
-          m_SubjFillType = subjFillType;
-          m_ClipFillType = clipFillType;
-          m_ClipType = clipType;
-          m_UsingPolyTree = false;
-          bool succeeded;
-          try
-          {
+        this.m_ExecuteLocked = true;
+        solution.Clear();
+        this.m_SubjFillType = subjFillType;
+        this.m_ClipFillType = clipFillType;
+        this.m_ClipType = clipType;
+        this.m_UsingPolyTree = false;
+        let succeeded:boolean;
+        try {
             succeeded = ExecuteInternal();
             //build the return polygons ...
-            if (succeeded) BuildResult(solution);
-          }
-          finally
-          {
+            if (succeeded) {
+              BuildResult(solution);
+            }
+        } finally {
             DisposeAllPolyPts();
-            m_ExecuteLocked = false;
-          }
-          return succeeded;
-      }
-      
+            this.m_ExecuteLocked = false;
+        }
+        return succeeded;
+    }
 
-      public bool Execute(ClipType clipType, PolyTree polytree,
-          PolyFillType subjFillType, PolyFillType clipFillType)
-      {
-          if (m_ExecuteLocked) return false;
-          m_ExecuteLocked = true;
-          m_SubjFillType = subjFillType;
-          m_ClipFillType = clipFillType;
-          m_ClipType = clipType;
-          m_UsingPolyTree = true;
-          bool succeeded;
-          try
-          {
+    public Execute(clipType:ClipType, polytree:PolyTree,
+        subjFillType:PolyFillType, clipFillType:PolyFillType):boolean {
+        if (this.m_ExecuteLocked) {
+            return false;
+        }
+        this.m_ExecuteLocked = true;
+        this.m_SubjFillType = subjFillType;
+        this.m_ClipFillType = clipFillType;
+        this.m_ClipType = clipType;
+        this.m_UsingPolyTree = true;
+        let succeeded:boolean;
+        try {
             succeeded = ExecuteInternal();
             //build the return polygons ...
-            if (succeeded) BuildResult2(polytree);
-          }
-          finally
-          {
+            if (succeeded) {
+                BuildResult2(polytree);
+            }
+        } finally {
             DisposeAllPolyPts();
-            m_ExecuteLocked = false;
-          }
-          return succeeded;
-      }
-      
+            this.m_ExecuteLocked = false;
+        }
+        return succeeded;
+    }
 
-      internal void FixHoleLinkage(OutRec outRec)
-      {
+    FixHoleLinkage(outRec:OutRec):void {
         //skip if an outermost polygon or
         //already already points to the correct FirstLeft ...
-        if (outRec.FirstLeft == null ||
-              (outRec.IsHole != outRec.FirstLeft.IsHole &&
-              outRec.FirstLeft.Pts != null)) return;
+        if (outRec.FirstLeft == null 
+            || (outRec.IsHole != outRec.FirstLeft.IsHole
+                && outRec.FirstLeft.Pts != null)) {
+            return;
+        }
 
-        OutRec orfl = outRec.FirstLeft;
-        while (orfl != null && ((orfl.IsHole == outRec.IsHole) || orfl.Pts == null))
-          orfl = orfl.FirstLeft;
+        let orfl = outRec.FirstLeft;
+        while (orfl != null
+            && (orfl.IsHole == outRec.IsHole || orfl.Pts == null)) {
+            orfl = orfl.FirstLeft;
+        }
         outRec.FirstLeft = orfl;
-      }
-      
+    }
 
-      private bool ExecuteInternal()
-      {
-        try
-        {
-          Reset();
-          m_SortedEdges = null;
-          m_Maxima = null;
+    private ExecuteInternal():boolean {
+        try {
+            Reset();
+            this.m_SortedEdges = null;
+            this.m_Maxima = null;
 
-          cInt botY, topY;
-          if (!PopScanbeam(out botY)) return false;
-          InsertLocalMinimaIntoAEL(botY);
-          while (PopScanbeam(out topY) || LocalMinimaPending())
-          {
-            ProcessHorizontals();
-            m_GhostJoins.Clear();
-            if (!ProcessIntersections(topY)) return false;
-            ProcessEdgesAtTopOfScanbeam(topY);
-            botY = topY;
-            InsertLocalMinimaIntoAEL(botY);
-          } 
+            let botY:Int64;
+            let topY:Int64;
 
-          //fix orientations ...
-          foreach (OutRec outRec in m_PolyOuts)
-          {
-            if (outRec.Pts == null || outRec.IsOpen) continue;
-            if ((outRec.IsHole ^ ReverseSolution) == (Area(outRec) > 0))
-              ReversePolyPtLinks(outRec.Pts);
-          }
+            let r = this.PopScanbeam();
+            if (!r.r) {
+                return false;
+            }
+            botY = r.Y;
+            this.InsertLocalMinimaIntoAEL(botY);
+            r = this.PopScanbeam();
+            while (r.r || this.LocalMinimaPending()) {
+                topY = r.Y;
+                this.ProcessHorizontals();
+                this.m_GhostJoins.Clear();
+                if (!this.ProcessIntersections(topY)) {
+                    return false;
+                }
+                this.ProcessEdgesAtTopOfScanbeam(topY);
+                botY = topY;
+                this.InsertLocalMinimaIntoAEL(botY);
+                r = this.PopScanbeam();
+            }
 
-          JoinCommonEdges();
+            //fix orientations ...
+            for (outRec of this.m_PolyOuts) {
+                if (outRec.Pts == null || outRec.IsOpen) {
+                    continue;
+                }
+                if ((outRec.IsHole ^ ReverseSolution) == (this.Area(outRec) > 0)) {
+                    this.ReversePolyPtLinks(outRec.Pts);
+                }
+            }
 
-          foreach (OutRec outRec in m_PolyOuts)
-          {
-            if (outRec.Pts == null) 
-                continue;
-            else if (outRec.IsOpen)
-                FixupOutPolyline(outRec);
-            else
-                FixupOutPolygon(outRec);
-          }
+            this.JoinCommonEdges();
 
-          if (StrictlySimple) DoSimplePolygons();
-          return true;
+            for (outRec of this.m_PolyOuts) {
+                if (outRec.Pts == null) {
+                    continue;
+                } else if (outRec.IsOpen) {
+                    this.FixupOutPolyline(outRec);
+                } else {
+                    this.FixupOutPolygon(outRec);
+                }
+            }
+
+            if (this.StrictlySimple) {
+                this.DoSimplePolygons();
+            }
+            return true;
+        } finally {
+            this.m_Joins.length = 0;
+            this.m_GhostJoins.length = 0;
         }
-        //catch { return false; }
-        finally 
-        {
-          m_Joins.Clear();
-          m_GhostJoins.Clear();          
+    }
+
+    private DisposeAllPolyPts():void {
+        for (let i = 0; i < this.m_PolyOuts.length; ++i) {
+            this.DisposeOutRec(i);
         }
-      }
-      
+        m_PolyOuts.length = 0;
+    }
 
-      private void DisposeAllPolyPts(){
-        for (int i = 0; i < m_PolyOuts.Count; ++i) DisposeOutRec(i);
-        m_PolyOuts.Clear();
-      }
-      
-
-      private void AddJoin(OutPt Op1, OutPt Op2, IntPoint OffPt)
-      {
-        Join j = new Join();
+    private AddJoin(Op1:OutPt, Op2:OutPt, OffPt:IntPoint):void {
+        let j = new Join();
         j.OutPt1 = Op1;
         j.OutPt2 = Op2;
         j.OffPt = OffPt;
-        m_Joins.Add(j);
-      }
-      
+        this.m_Joins.push(j);
+    }
 
-      private void AddGhostJoin(OutPt Op, IntPoint OffPt)
-      {
-        Join j = new Join();
+    private AddGhostJoin(Op:OutPt, OffPt:IntPoint):void {
+        let j = new Join();
         j.OutPt1 = Op;
         j.OffPt = OffPt;
-        m_GhostJoins.Add(j);
-      }
-      
+        this.m_GhostJoins.push(j);
+    }
+  
+    private InsertLocalMinimaIntoAEL(botY:Int64):void {
+        let lm:LocalMinima;
+        while ((lm = this.PopLocalMinima(botY)) != null) {
+            let lb = lm.LeftBound;
+            let rb = lm.RightBound;
 
-#if use_xyz
-      internal void SetZ(ref IntPoint pt, TEdge e1, TEdge e2)
-      {
-        if (pt.Z != 0 || ZFillFunction == null) return;
-        else if (pt == e1.Bot) pt.Z = e1.Bot.Z;
-        else if (pt == e1.Top) pt.Z = e1.Top.Z;
-        else if (pt == e2.Bot) pt.Z = e2.Bot.Z;
-        else if (pt == e2.Top) pt.Z = e2.Top.Z;
-        else ZFillFunction(e1.Bot, e1.Top, e2.Bot, e2.Top, ref pt);
-      }
-      
-#endif
-
-      private void InsertLocalMinimaIntoAEL(cInt botY)
-      {
-        LocalMinima lm;
-        while (PopLocalMinima(botY, out lm))
-        {
-          TEdge lb = lm.LeftBound;
-          TEdge rb = lm.RightBound;
-
-          OutPt Op1 = null;
-          if (lb == null)
-          {
-            InsertEdgeIntoAEL(rb, null);
-            SetWindingCount(rb);
-            if (IsContributing(rb))
-              Op1 = AddOutPt(rb, rb.Bot);
-          }
-          else if (rb == null)
-          {
-            InsertEdgeIntoAEL(lb, null);
-            SetWindingCount(lb);
-            if (IsContributing(lb))
-              Op1 = AddOutPt(lb, lb.Bot);
-            InsertScanbeam(lb.Top.Y);
-          }
-          else
-          {
-            InsertEdgeIntoAEL(lb, null);
-            InsertEdgeIntoAEL(rb, lb);
-            SetWindingCount(lb);
-            rb.WindCnt = lb.WindCnt;
-            rb.WindCnt2 = lb.WindCnt2;
-            if (IsContributing(lb))
-              Op1 = AddLocalMinPoly(lb, rb, lb.Bot);
-            InsertScanbeam(lb.Top.Y);
-          }
-
-          if (rb != null)
-          {
-            if (IsHorizontal(rb))
-            {
-              if (rb.NextInLML != null)
-                InsertScanbeam(rb.NextInLML.Top.Y);
-              AddEdgeToSEL(rb);
-            }
-            else
-              InsertScanbeam(rb.Top.Y);
-          }
-
-        if (lb == null || rb == null) continue;
-
-          //if output polygons share an Edge with a horizontal rb, they'll need joining later ...
-          if (Op1 != null && IsHorizontal(rb) && 
-            m_GhostJoins.Count > 0 && rb.WindDelta != 0)
-          {
-            for (int i = 0; i < m_GhostJoins.Count; i++)
-            {
-              //if the horizontal Rb and a 'ghost' horizontal overlap, then convert
-              //the 'ghost' join to a real join ready for later ...
-              Join j = m_GhostJoins[i];
-              if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
-                AddJoin(j.OutPt1, Op1, j.OffPt);
-            }
-          }
-
-          if (lb.OutIdx >= 0 && lb.PrevInAEL != null &&
-            lb.PrevInAEL.Curr.X == lb.Bot.X &&
-            lb.PrevInAEL.OutIdx >= 0 &&
-            SlopesEqual(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, m_UseFullRange) &&
-            lb.WindDelta != 0 && lb.PrevInAEL.WindDelta != 0)
-          {
-            OutPt Op2 = AddOutPt(lb.PrevInAEL, lb.Bot);
-            AddJoin(Op1, Op2, lb.Top);
-          }
-
-          if( lb.NextInAEL != rb )
-          {
-
-            if (rb.OutIdx >= 0 && rb.PrevInAEL.OutIdx >= 0 &&
-              SlopesEqual(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, m_UseFullRange) &&
-              rb.WindDelta != 0 && rb.PrevInAEL.WindDelta != 0)
-            {
-              OutPt Op2 = AddOutPt(rb.PrevInAEL, rb.Bot);
-              AddJoin(Op1, Op2, rb.Top);
+            let Op1:OutPt = null;
+            if (lb == null) {
+                this.InsertEdgeIntoAEL(rb, null);
+                this.SetWindingCount(rb);
+                if (this.IsContributing(rb)) {
+                    Op1 = this.AddOutPt(rb, rb.Bot);
+                }
+            } else if (rb == null) {
+                this.InsertEdgeIntoAEL(lb, null);
+                this.SetWindingCount(lb);
+                if (this.IsContributing(lb)) {
+                  Op1 = this.AddOutPt(lb, lb.Bot);
+                }
+                this.InsertScanbeam(lb.Top.Y);
+            } else {
+                this.InsertEdgeIntoAEL(lb, null);
+                this.InsertEdgeIntoAEL(rb, lb);
+                this.SetWindingCount(lb);
+                this.rb.WindCnt = lb.WindCnt;
+                this.rb.WindCnt2 = lb.WindCnt2;
+                if (this.IsContributing(lb)) {
+                    Op1 = this.AddLocalMinPoly(lb, rb, lb.Bot);
+                }
+                this.InsertScanbeam(lb.Top.Y);
             }
 
-            TEdge e = lb.NextInAEL;
-            if (e != null)
-              while (e != rb)
-              {
-                //nb: For calculating winding counts etc, IntersectEdges() assumes
-                //that param1 will be to the right of param2 ABOVE the intersection ...
-                IntersectEdges(rb, e, lb.Curr); //order important here
-                e = e.NextInAEL;
-              }
-          }
+            if (rb != null) {
+                if (IsHorizontal(rb)) {
+                    if (rb.NextInLML != null) {
+                        this.InsertScanbeam(rb.NextInLML.Top.Y);
+                    }
+                    this.AddEdgeToSEL(rb);
+                } else {
+                    this.InsertScanbeam(rb.Top.Y);
+                }
+            }
+
+            if (lb == null || rb == null) {
+                continue;
+            }
+
+            //if output polygons share an Edge with a horizontal rb, they'll need joining later ...
+            if (Op1 != null
+                && IsHorizontal(rb) 
+                && this.m_GhostJoins.length > 0
+                && rb.WindDelta != 0) {
+                for (let i = 0; i < this.m_GhostJoins.length; i++) {
+                    //if the horizontal Rb and a 'ghost' horizontal overlap, then convert
+                    //the 'ghost' join to a real join ready for later ...
+                    let j = this.m_GhostJoins[i];
+                    if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X)) {
+                        this.AddJoin(j.OutPt1, Op1, j.OffPt);
+                    }
+                }
+            }
+
+            if (lb.OutIdx >= 0 
+                && lb.PrevInAEL != null 
+                && lb.PrevInAEL.Curr.X == lb.Bot.X
+                && lb.PrevInAEL.OutIdx >= 0
+                && SlopesEqual4P(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, m_UseFullRange)
+                && lb.WindDelta != 0 
+                && lb.PrevInAEL.WindDelta != 0) {
+                let Op2 = this.AddOutPt(lb.PrevInAEL, lb.Bot);
+                this.AddJoin(Op1, Op2, lb.Top);
+            }
+
+            if( lb.NextInAEL != rb ) {
+                if (rb.OutIdx >= 0 
+                    && rb.PrevInAEL.OutIdx >= 0 
+                    && SlopesEqual4P(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, m_UseFullRange)
+                    && rb.WindDelta != 0 
+                    && rb.PrevInAEL.WindDelta != 0) {
+                  let Op2 = this.AddOutPt(rb.PrevInAEL, rb.Bot);
+                  this.AddJoin(Op1, Op2, rb.Top);
+                }
+
+                let e = lb.NextInAEL;
+                if (e != null) {
+                    while (e != rb) {
+                        //nb: For calculating winding counts etc, IntersectEdges() assumes
+                        //that param1 will be to the right of param2 ABOVE the intersection ...
+                        this.IntersectEdges(rb, e, lb.Curr); //order important here
+                        e = e.NextInAEL;
+                    }
+                }
+            }
         }
-      }
-      
+    }
 
-      private void InsertEdgeIntoAEL(TEdge edge, TEdge startEdge)
-      {
-        if (m_ActiveEdges == null)
-        {
-          edge.PrevInAEL = null;
-          edge.NextInAEL = null;
-          m_ActiveEdges = edge;
+    private InsertEdgeIntoAEL(edge:TEdge, startEdge:TEdge):void {
+        if (m_ActiveEdges == null) {
+            edge.PrevInAEL = null;
+            edge.NextInAEL = null;
+            this.m_ActiveEdges = edge;
+        } else if (startEdge == null 
+            && this.E2InsertsBeforeE1(m_ActiveEdges, edge)) {
+            edge.PrevInAEL = null;
+            edge.NextInAEL = m_ActiveEdges;
+            this.m_ActiveEdges.PrevInAEL = edge;
+            this.m_ActiveEdges = edge;
+        } else {
+            if (startEdge == null) {
+                startEdge = this.m_ActiveEdges;
+            }
+            while (startEdge.NextInAEL != null
+                && !E2InsertsBeforeE1(startEdge.NextInAEL, edge)) {
+                startEdge = startEdge.NextInAEL;
+            }
+            edge.NextInAEL = startEdge.NextInAEL;
+            if (startEdge.NextInAEL != null) {
+                startEdge.NextInAEL.PrevInAEL = edge;
+            }
+            edge.PrevInAEL = startEdge;
+            startEdge.NextInAEL = edge;
         }
-        else if (startEdge == null && E2InsertsBeforeE1(m_ActiveEdges, edge))
-        {
-          edge.PrevInAEL = null;
-          edge.NextInAEL = m_ActiveEdges;
-          m_ActiveEdges.PrevInAEL = edge;
-          m_ActiveEdges = edge;
+    }
+
+    private IsEvenOddFillType(edge:TEdge):boolean {
+        if (edge.PolyTyp == PolyType.ptSubject) {
+            return this.m_SubjFillType == PolyFillType.pftEvenOdd;
         }
-        else
-        {
-          if (startEdge == null) startEdge = m_ActiveEdges;
-          while (startEdge.NextInAEL != null &&
-            !E2InsertsBeforeE1(startEdge.NextInAEL, edge))
-            startEdge = startEdge.NextInAEL;
-          edge.NextInAEL = startEdge.NextInAEL;
-          if (startEdge.NextInAEL != null) startEdge.NextInAEL.PrevInAEL = edge;
-          edge.PrevInAEL = startEdge;
-          startEdge.NextInAEL = edge;
+        return this.m_ClipFillType == PolyFillType.pftEvenOdd;
+    }  
+
+    private IsEvenOddAltFillType(edge:TEdge):boolean {
+        if (edge.PolyTyp == PolyType.ptSubject) {
+            return this.m_ClipFillType == PolyFillType.pftEvenOdd; 
         }
-      }
-      //----------------------------------------------------------------------
+        return this.m_SubjFillType == PolyFillType.pftEvenOdd;
+    }
 
-      private bool E2InsertsBeforeE1(TEdge e1, TEdge e2)
-      {
-          if (e2.Curr.X == e1.Curr.X)
-          {
-              if (e2.Top.Y > e1.Top.Y)
-                  return e2.Top.X < TopX(e1, e2.Top.Y);
-              else return e1.Top.X > TopX(e2, e1.Top.Y);
-          }
-          else return e2.Curr.X < e1.Curr.X;
-      }
-      
+    private IsContributing(edge:TEdge):boolean {
+        let pft:PolyFillType;
+        let pft2:PolyFillType;
+        
+        if (edge.PolyTyp == PolyType.ptSubject) {
+            pft = this.m_SubjFillType;
+            pft2 = this.m_ClipFillType;
+        } else {
+            pft = this.m_ClipFillType;
+            pft2 = this.m_SubjFillType;
+        }
+        switch (pft) {
+            case PolyFillType.pftEvenOdd:
+                //return false if a subj line has been flagged as inside a subj polygon
+                if (edge.WindDelta == 0 && edge.WindCnt != 1) {
+                    return false;
+                }
+                break;
+            case PolyFillType.pftNonZero:
+                if (Math.Abs(edge.WindCnt) != 1) {
+                    return false;
+                }
+                break;
+            case PolyFillType.pftPositive:
+                if (edge.WindCnt != 1) {
+                    return false;
+                }
+                break;
+            default: //PolyFillType.pftNegative
+                if (edge.WindCnt != -1) {
+                    return false;
+                }
+                break;
+        }
 
-      private bool IsEvenOddFillType(TEdge edge) 
-      {
-        if (edge.PolyTyp == PolyType.ptSubject)
-            return m_SubjFillType == PolyFillType.pftEvenOdd; 
-        else
-            return m_ClipFillType == PolyFillType.pftEvenOdd;
-      }
-      
-
-      private bool IsEvenOddAltFillType(TEdge edge) 
-      {
-        if (edge.PolyTyp == PolyType.ptSubject)
-            return m_ClipFillType == PolyFillType.pftEvenOdd; 
-        else
-            return m_SubjFillType == PolyFillType.pftEvenOdd;
-      }
-      
-
-      private bool IsContributing(TEdge edge)
-      {
-          PolyFillType pft, pft2;
-          if (edge.PolyTyp == PolyType.ptSubject)
-          {
-              pft = m_SubjFillType;
-              pft2 = m_ClipFillType;
-          }
-          else
-          {
-              pft = m_ClipFillType;
-              pft2 = m_SubjFillType;
-          }
-
-          switch (pft)
-          {
-              case PolyFillType.pftEvenOdd:
-                  //return false if a subj line has been flagged as inside a subj polygon
-                  if (edge.WindDelta == 0 && edge.WindCnt != 1) return false;
-                  break;
-              case PolyFillType.pftNonZero:
-                  if (Math.Abs(edge.WindCnt) != 1) return false;
-                  break;
-              case PolyFillType.pftPositive:
-                  if (edge.WindCnt != 1) return false;
-                  break;
-              default: //PolyFillType.pftNegative
-                  if (edge.WindCnt != -1) return false; 
-                  break;
-          }
-
-          switch (m_ClipType)
-          {
+        switch (m_ClipType) {
             case ClipType.ctIntersection:
-                switch (pft2)
-                {
+                switch (pft2) {
                     case PolyFillType.pftEvenOdd:
                     case PolyFillType.pftNonZero:
                         return (edge.WindCnt2 != 0);
@@ -1478,9 +1442,9 @@ export class Clipper extends ClipperBase {
                     default:
                         return (edge.WindCnt2 < 0);
                 }
-            case ClipType.ctUnion:
-                switch (pft2)
-                {
+                break;
+          case ClipType.ctUnion:
+                switch (pft2) {
                     case PolyFillType.pftEvenOdd:
                     case PolyFillType.pftNonZero:
                         return (edge.WindCnt2 == 0);
@@ -1489,147 +1453,138 @@ export class Clipper extends ClipperBase {
                     default:
                         return (edge.WindCnt2 >= 0);
                 }
-            case ClipType.ctDifference:
-                if (edge.PolyTyp == PolyType.ptSubject)
-                    switch (pft2)
-                    {
-                        case PolyFillType.pftEvenOdd:
-                        case PolyFillType.pftNonZero:
-                            return (edge.WindCnt2 == 0);
-                        case PolyFillType.pftPositive:
-                            return (edge.WindCnt2 <= 0);
-                        default:
-                            return (edge.WindCnt2 >= 0);
-                    }
-                else
-                    switch (pft2)
-                    {
-                        case PolyFillType.pftEvenOdd:
-                        case PolyFillType.pftNonZero:
-                            return (edge.WindCnt2 != 0);
-                        case PolyFillType.pftPositive:
-                            return (edge.WindCnt2 > 0);
-                        default:
-                            return (edge.WindCnt2 < 0);
-                    }
-            case ClipType.ctXor:
-                if (edge.WindDelta == 0) //XOr always contributing unless open
-                  switch (pft2)
-                  {
-                    case PolyFillType.pftEvenOdd:
-                    case PolyFillType.pftNonZero:
-                      return (edge.WindCnt2 == 0);
-                    case PolyFillType.pftPositive:
-                      return (edge.WindCnt2 <= 0);
-                    default:
-                      return (edge.WindCnt2 >= 0);
+                break;
+          case ClipType.ctDifference:
+              if (edge.PolyTyp == PolyType.ptSubject) {
+                  switch (pft2) {
+                      case PolyFillType.pftEvenOdd:
+                      case PolyFillType.pftNonZero:
+                          return (edge.WindCnt2 == 0);
+                      case PolyFillType.pftPositive:
+                          return (edge.WindCnt2 <= 0);
+                      default:
+                          return (edge.WindCnt2 >= 0);
                   }
-                else
-                  return true;
-          }
-          return true;
-      }
-      
+              } else {
+                  switch (pft2) {
+                      case PolyFillType.pftEvenOdd:
+                      case PolyFillType.pftNonZero:
+                          return (edge.WindCnt2 != 0);
+                      case PolyFillType.pftPositive:
+                          return (edge.WindCnt2 > 0);
+                      default:
+                          return (edge.WindCnt2 < 0);
+                  }
+              }
+              break;
+          case ClipType.ctXor:
+              if (edge.WindDelta == 0) {//XOr always contributing unless open
+                  switch (pft2) {
+                      case PolyFillType.pftEvenOdd:
+                      case PolyFillType.pftNonZero:
+                          return (edge.WindCnt2 == 0);
+                      case PolyFillType.pftPositive:
+                          return (edge.WindCnt2 <= 0);
+                        default:
+                        return (edge.WindCnt2 >= 0);
+                  }
+              }
+              return true;
+        }
+        return true;
+    }
 
-      private void SetWindingCount(TEdge edge)
-      {
-        TEdge e = edge.PrevInAEL;
+    private SetWindingCount(edge:TEdge):void {
+        let e = edge.PrevInAEL;
         //find the edge of the same polytype that immediately preceeds 'edge' in AEL
-        while (e != null && ((e.PolyTyp != edge.PolyTyp) || (e.WindDelta == 0))) e = e.PrevInAEL;
-        if (e == null)
-        {
-          PolyFillType pft;
-          pft = (edge.PolyTyp == PolyType.ptSubject ? m_SubjFillType : m_ClipFillType);
-          if (edge.WindDelta == 0) edge.WindCnt = (pft == PolyFillType.pftNegative ? -1 : 1);
-          else edge.WindCnt = edge.WindDelta;
-          edge.WindCnt2 = 0;
-          e = m_ActiveEdges; //ie get ready to calc WindCnt2
+        while (e != null
+            && (e.PolyTyp != edge.PolyTyp || e.WindDelta == 0)) {
+              e = e.PrevInAEL;
         }
-        else if (edge.WindDelta == 0 && m_ClipType != ClipType.ctUnion)
-        {
-          edge.WindCnt = 1;
-          edge.WindCnt2 = e.WindCnt2;
-          e = e.NextInAEL; //ie get ready to calc WindCnt2
-        }
-        else if (IsEvenOddFillType(edge))
-        {
-          //EvenOdd filling ...
-          if (edge.WindDelta == 0)
-          {
-            //are we inside a subj polygon ...
-            bool Inside = true;
-            TEdge e2 = e.PrevInAEL;
-            while (e2 != null)
-            {
-              if (e2.PolyTyp == e.PolyTyp && e2.WindDelta != 0)
-                Inside = !Inside;
-              e2 = e2.PrevInAEL;
+        if (e == null) {
+            let pft:PolyFillType;
+            pft = edge.PolyTyp == PolyType.ptSubject ? this.m_SubjFillType : this.m_ClipFillType;
+            if (edge.WindDelta == 0) {
+                edge.WindCnt = pft == PolyFillType.pftNegative ? -1 : 1;
+            } else {
+                edge.WindCnt = edge.WindDelta;
             }
-            edge.WindCnt = (Inside ? 0 : 1);
-          }
-          else
-          {
-            edge.WindCnt = edge.WindDelta;
-          }
-          edge.WindCnt2 = e.WindCnt2;
-          e = e.NextInAEL; //ie get ready to calc WindCnt2
-        }
-        else
-        {
-          //nonZero, Positive or Negative filling ...
-          if (e.WindCnt * e.WindDelta < 0)
-          {
-            //prev edge is 'decreasing' WindCount (WC) toward zero
-            //so we're outside the previous polygon ...
-            if (Math.Abs(e.WindCnt) > 1)
-            {
-              //outside prev poly but still inside another.
-              //when reversing direction of prev poly use the same WC 
-              if (e.WindDelta * edge.WindDelta < 0) edge.WindCnt = e.WindCnt;
-              //otherwise continue to 'decrease' WC ...
-              else edge.WindCnt = e.WindCnt + edge.WindDelta;
+            edge.WindCnt2 = 0;
+            e = m_ActiveEdges; //ie get ready to calc WindCnt2
+        } else if (edge.WindDelta == 0 && this.m_ClipType != ClipType.ctUnion) {
+            edge.WindCnt = 1;
+            edge.WindCnt2 = e.WindCnt2;
+            e = e.NextInAEL; //ie get ready to calc WindCnt2
+        } else if (this.IsEvenOddFillType(edge)) {
+            //EvenOdd filling ...
+            if (edge.WindDelta == 0) {
+                //are we inside a subj polygon ...
+                let Inside = true;
+                let e2 = e.PrevInAEL;
+                while (e2 != null) {
+                    if (e2.PolyTyp == e.PolyTyp && e2.WindDelta != 0) {
+                        Inside = !Inside;
+                    }
+                    e2 = e2.PrevInAEL;
+                }
+                edge.WindCnt = Inside ? 0 : 1;
+            } else {
+                edge.WindCnt = edge.WindDelta;
             }
-            else
-              //now outside all polys of same polytype so set own WC ...
-              edge.WindCnt = (edge.WindDelta == 0 ? 1 : edge.WindDelta);
-          }
-          else
-          {
-            //prev edge is 'increasing' WindCount (WC) away from zero
-            //so we're inside the previous polygon ...
-            if (edge.WindDelta == 0)
-              edge.WindCnt = (e.WindCnt < 0 ? e.WindCnt - 1 : e.WindCnt + 1);
-            //if wind direction is reversing prev then use same WC
-            else if (e.WindDelta * edge.WindDelta < 0)
-              edge.WindCnt = e.WindCnt;
-            //otherwise add to WC ...
-            else edge.WindCnt = e.WindCnt + edge.WindDelta;
-          }
-          edge.WindCnt2 = e.WindCnt2;
-          e = e.NextInAEL; //ie get ready to calc WindCnt2
+            edge.WindCnt2 = e.WindCnt2;
+            e = e.NextInAEL; //ie get ready to calc WindCnt2
+        } else {
+            //nonZero, Positive or Negative filling ...
+            if (e.WindCnt * e.WindDelta < 0) {
+                //prev edge is 'decreasing' WindCount (WC) toward zero
+                //so we're outside the previous polygon ...
+                if (Math.Abs(e.WindCnt) > 1) {
+                    //outside prev poly but still inside another.
+                    //when reversing direction of prev poly use the same WC 
+                    if (e.WindDelta * edge.WindDelta < 0) {
+                        edge.WindCnt = e.WindCnt;
+                        //otherwise continue to 'decrease' WC ...
+                    } else {
+                        edge.WindCnt = e.WindCnt + edge.WindDelta;
+                    }
+                } else {
+                    //now outside all polys of same polytype so set own WC ...
+                    edge.WindCnt = (edge.WindDelta == 0 ? 1 : edge.WindDelta);
+                }
+            } else {
+                //prev edge is 'increasing' WindCount (WC) away from zero
+                //so we're inside the previous polygon ...
+                if (edge.WindDelta == 0) {
+                    edge.WindCnt = e.WindCnt < 0 ? e.WindCnt - 1 : e.WindCnt + 1;
+                //if wind direction is reversing prev then use same WC
+                } else if (e.WindDelta * edge.WindDelta < 0) {
+                    edge.WindCnt = e.WindCnt;
+                //otherwise add to WC ...
+                } else {
+                    edge.WindCnt = e.WindCnt + edge.WindDelta;
+                }
+            }
+            edge.WindCnt2 = e.WindCnt2;
+            e = e.NextInAEL; //ie get ready to calc WindCnt2
         }
 
         //update WindCnt2 ...
-        if (IsEvenOddAltFillType(edge))
-        {
-          //EvenOdd filling ...
-          while (e != edge)
-          {
-            if (e.WindDelta != 0)
-              edge.WindCnt2 = (edge.WindCnt2 == 0 ? 1 : 0);
-            e = e.NextInAEL;
-          }
+        if (this.IsEvenOddAltFillType(edge)) {
+            //EvenOdd filling ...
+            while (e != edge) {
+                if (e.WindDelta != 0) {
+                    edge.WindCnt2 = edge.WindCnt2 == 0 ? 1 : 0;
+                }
+                e = e.NextInAEL;
+            }
+        } else {
+            //nonZero, Positive or Negative filling ...
+            while (e != edge) {
+                edge.WindCnt2 += e.WindDelta;
+                e = e.NextInAEL;
+            }
         }
-        else
-        {
-          //nonZero, Positive or Negative filling ...
-          while (e != edge)
-          {
-            edge.WindCnt2 += e.WindDelta;
-            e = e.NextInAEL;
-          }
-        }
-      }
+    }
       
 
       private void AddEdgeToSEL(TEdge edge)
@@ -2736,14 +2691,8 @@ export class Clipper extends ClipperBase {
           return value < 0 ? (cInt)(value - 0.5) : (cInt)(value + 0.5);
       }
       
-
-      private static cInt TopX(TEdge edge, cInt currentY)
-      {
-          if (currentY == edge.Top.Y)
-              return edge.Top.X;
-          return edge.Bot.X + Round(edge.Dx *(currentY - edge.Bot.Y));
-      }
       
+
 
       private void IntersectPoint(TEdge edge1, TEdge edge2, out IntPoint ip)
       {
