@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import {Int64, Int128} from "../int64/int64";
+import {Int64, Int128} from "../intMath/int64";
 
 const tabu:Int64[] = [
     Int64.fromInt(0),

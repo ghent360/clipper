@@ -91,15 +91,22 @@ class DoublePoint {
 }
 
 class IntRect {
-    constructor(
-        public left:Int64,
-        public top:Int64,
-        public right:Int64,
-        public bottom:Int64) {
+    public left:Int64;
+    public top:Int64;
+    public right:Int64;
+    public bottom:Int64;
+
+    public static Init(left:Int64, top:Int64, right:Int64, bottom:Int64):IntRect {
+        let result = new IntRect();
+        result.left = left.clone();
+        result.top = top.clone();
+        result.right = right.clone();
+        result.bottom = bottom.clone();
+        return result;
     }
 
     public static copy(other:IntRect):IntRect {
-        return new IntRect(other.left, other.top, other.right, other.bottom);
+        return IntRect.Init(other.left, other.top, other.right, other.bottom);
     }
 }
 
@@ -417,6 +424,32 @@ function FindNextLocMin(e:TEdge):TEdge {
     return e;
 }
 
+function Pt2IsBetweenPt1AndPt3(pt1:IntPoint, pt2:IntPoint, pt3:IntPoint):boolean {
+    if (pt1.equals(pt3) || pt1.equals(pt2) || pt3.equals(pt2)) {
+        return false;
+    }
+    if (pt1.x.notEquals(pt3.x)) {
+        return pt2.x.greaterThan(pt1.x) == pt2.x.lessThan(pt3.x);
+    }
+    return pt2.y.greaterThan(pt1.y) == pt2.y.lessThan(pt3.y);
+}
+
+function RemoveEdge(e:TEdge):TEdge {
+    //removes e from double_linked_list (but without removing from memory)
+    e.Prev.Next = e.Next;
+    e.Next.Prev = e.Prev;
+    let result = e.Next;
+    e.Prev = null; //flag as removed (see ClipperBase.Clear)
+    return result;
+}
+
+function ReverseHorizontal(e:TEdge):void {
+    //swap horizontal edges' top and bottom x's so they follow the natural
+    //progression of the bounds - ie so their xbots will align with the
+    //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
+    Int64.Swap(e.Top.x, e.Bot.x);
+}
+
 class ClipperBase {
     m_MinimaList:LocalMinima;
     m_CurrentLM:LocalMinima;
@@ -447,467 +480,231 @@ class ClipperBase {
         this.m_CurrentLM = null;
     }
 
-    private TEdge ProcessBound(TEdge E, bool LeftBoundIsForward)
-    {
-      TEdge EStart, Result = E;
-      TEdge Horz;
+    private InsertLocalMinima(newLm:LocalMinima):void {
+        if ( this.m_MinimaList == null ) {
+            this.m_MinimaList = newLm;
+        }
+        else if (newLm.Y >= this.m_MinimaList.Y ) {
+            newLm.Next = this.m_MinimaList;
+            this.m_MinimaList = newLm;
+        } else {
+            let tmpLm = this.m_MinimaList;
+            while (tmpLm.Next != null && newLm.Y < tmpLm.Next.Y) {
+                tmpLm = tmpLm.Next;
+            }
+            newLm.Next = tmpLm.Next;
+            tmpLm.Next = newLm;
+        }
+    }
 
-      if (Result.OutIdx == Skip)
-      {
-        //check if there are edges beyond the skip edge in the bound and if so
-        //create another LocMin and calling ProcessBound once more ...
-        E = Result;
-        if (LeftBoundIsForward)
+    PopLocalMinima(Y:Int64):LocalMinima {
+        let current = this.m_CurrentLM;
+        if (this.m_CurrentLM != null && this.m_CurrentLM.Y == Y)
         {
-          while (E.Top.Y == E.Next.Bot.Y) E = E.Next;
-          while (E != Result && E.Dx == horizontal) E = E.Prev;
+            this.m_CurrentLM = this.m_CurrentLM.Next;
+            return current;
         }
-        else
-        {
-          while (E.Top.Y == E.Prev.Bot.Y) E = E.Prev;
-          while (E != Result && E.Dx == horizontal) E = E.Next;
+        return null;
+    }
+    
+    private ProcessBound(E:TEdge, LeftBoundIsForward:boolean):TEdge {
+        let EStart:TEdge;
+        let Result = E;
+        let Horz:TEdge;
+
+        if (Result.OutIdx == Skip) {
+            //check if there are edges beyond the skip edge in the bound and if so
+            //create another LocMin and calling ProcessBound once more ...
+            E = Result;
+            if (LeftBoundIsForward) {
+                while (E.Top.y.equals(E.Next.Bot.y)) E = E.Next;
+                while (E != Result && E.Dx == horizontal) E = E.Prev;
+            } else {
+                while (E.Top.y.equals(E.Prev.Bot.y)) E = E.Prev;
+                while (E != Result && E.Dx == horizontal) E = E.Next;
+            }
+            if (E == Result) {
+                Result = LeftBoundIsForward ? E.Next : E.Prev;
+            } else {
+                //there are more edges in the bound beyond result starting with E
+                E = LeftBoundIsForward ? Result.Next : Result.Prev;
+                let locMin = new LocalMinima();
+                locMin.Next = null;
+                locMin.Y = E.Bot.y;
+                locMin.LeftBound = null;
+                locMin.RightBound = E;
+                E.WindDelta = 0;
+                Result = this.ProcessBound(E, LeftBoundIsForward);
+                this.InsertLocalMinima(locMin);
+            }
+            return Result;
         }
-        if (E == Result)
-        {
-          if (LeftBoundIsForward) Result = E.Next;
-          else Result = E.Prev;
+
+        if (E.Dx == horizontal) {
+            //We need to be careful with open paths because this may not be a
+            //true local minima (ie E may be following a skip edge).
+            //Also, consecutive horz. edges may start heading left before going right.
+            EStart = LeftBoundIsForward ? E.Prev : E.Next;
+            if (EStart.Dx == horizontal) {//ie an adjoining horizontal skip edge
+                if (EStart.Bot.x.notEquals(E.Bot.x) 
+                    && EStart.Top.x .notEquals(E.Bot.x)) {
+                    ReverseHorizontal(E);
+                }
+            } else if (EStart.Bot.x.notEquals(E.Bot.x)) {
+                ReverseHorizontal(E);
+            }
         }
-        else
-        {
-          //there are more edges in the bound beyond result starting with E
-          if (LeftBoundIsForward)
-            E = Result.Next;
-          else
-            E = Result.Prev;
-          LocalMinima locMin = new LocalMinima();
-          locMin.Next = null;
-          locMin.Y = E.Bot.Y;
-          locMin.LeftBound = null;
-          locMin.RightBound = E;
-          E.WindDelta = 0;
-          Result = ProcessBound(E, LeftBoundIsForward);
-          InsertLocalMinima(locMin);
+
+        EStart = E;
+        if (LeftBoundIsForward) {
+            while (Result.Top.y.equals(Result.Next.Bot.y)
+                && Result.Next.OutIdx != Skip) {
+                Result = Result.Next;
+            }
+
+            if (Result.Dx == horizontal && Result.Next.OutIdx != Skip) {
+                //nb: at the top of a bound, horizontals are added to the bound
+                //only when the preceding edge attaches to the horizontal's left vertex
+                //unless a Skip edge is encountered when that becomes the top divide
+                Horz = Result;
+                while (Horz.Prev.Dx == horizontal) Horz = Horz.Prev;
+                if (Horz.Prev.Top.x.greaterThan(Result.Next.Top.x)) {
+                    Result = Horz.Prev;
+                }
+            }
+
+            while (E != Result) {
+                E.NextInLML = E.Next;
+                if (E.Dx == horizontal && E != EStart && E.Bot.x.notEquals(E.Prev.Top.x)) { 
+                    ReverseHorizontal(E);
+                }
+                E = E.Next;
+            }
+
+            if (E.Dx == horizontal && E != EStart && E.Bot.x.notEquals(E.Prev.Top.x)) { 
+                ReverseHorizontal(E);
+            }
+            Result = Result.Next; //move to the edge just beyond current bound
+        } else {
+            while (Result.Top.y.equals(Result.Prev.Bot.y)
+                && Result.Prev.OutIdx != Skip) {
+                Result = Result.Prev;
+            }
+
+            if (Result.Dx == horizontal && Result.Prev.OutIdx != Skip) {
+                Horz = Result;
+                while (Horz.Next.Dx == horizontal) Horz = Horz.Next;
+                if (Horz.Next.Top.x.greaterThanOrEqual(Result.Prev.Top.x)) {
+                    Result = Horz.Next;
+                }
+            }
+
+            while (E != Result) {
+                E.NextInLML = E.Prev;
+                if (E.Dx == horizontal && E != EStart && E.Bot.x.notEquals(E.Next.Top.x)) {
+                    ReverseHorizontal(E);
+                }
+                E = E.Prev;
+            }
+
+            if (E.Dx == horizontal && E != EStart && E.Bot.x.notEquals(E.Next.Top.x)) {
+                ReverseHorizontal(E);
+            }
+            Result = Result.Prev; //move to the edge just beyond current bound
         }
         return Result;
-      }
-
-      if (E.Dx == horizontal)
-      {
-        //We need to be careful with open paths because this may not be a
-        //true local minima (ie E may be following a skip edge).
-        //Also, consecutive horz. edges may start heading left before going right.
-        if (LeftBoundIsForward) EStart = E.Prev;
-        else EStart = E.Next;
-        if (EStart.Dx == horizontal) //ie an adjoining horizontal skip edge
-        {
-        if (EStart.Bot.X != E.Bot.X && EStart.Top.X != E.Bot.X)
-            ReverseHorizontal(E);
-        }
-        else if (EStart.Bot.X != E.Bot.X)
-        ReverseHorizontal(E);
-      }
-
-      EStart = E;
-      if (LeftBoundIsForward)
-      {
-        while (Result.Top.Y == Result.Next.Bot.Y && Result.Next.OutIdx != Skip)
-          Result = Result.Next;
-        if (Result.Dx == horizontal && Result.Next.OutIdx != Skip)
-        {
-          //nb: at the top of a bound, horizontals are added to the bound
-          //only when the preceding edge attaches to the horizontal's left vertex
-          //unless a Skip edge is encountered when that becomes the top divide
-          Horz = Result;
-          while (Horz.Prev.Dx == horizontal) Horz = Horz.Prev;
-          if (Horz.Prev.Top.X > Result.Next.Top.X) Result = Horz.Prev;
-        }
-        while (E != Result)
-        {
-          E.NextInLML = E.Next;
-          if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Prev.Top.X) 
-            ReverseHorizontal(E);
-          E = E.Next;
-        }
-        if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Prev.Top.X) 
-          ReverseHorizontal(E);
-        Result = Result.Next; //move to the edge just beyond current bound
-      }
-      else
-      {
-        while (Result.Top.Y == Result.Prev.Bot.Y && Result.Prev.OutIdx != Skip)
-          Result = Result.Prev;
-        if (Result.Dx == horizontal && Result.Prev.OutIdx != Skip)
-        {
-          Horz = Result;
-          while (Horz.Next.Dx == horizontal) Horz = Horz.Next;
-          if (Horz.Next.Top.X == Result.Prev.Top.X || 
-              Horz.Next.Top.X > Result.Prev.Top.X) Result = Horz.Next;
-        }
-
-        while (E != Result)
-        {
-          E.NextInLML = E.Prev;
-          if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Next.Top.X) 
-            ReverseHorizontal(E);
-          E = E.Prev;
-        }
-        if (E.Dx == horizontal && E != EStart && E.Bot.X != E.Next.Top.X) 
-          ReverseHorizontal(E);
-        Result = Result.Prev; //move to the edge just beyond current bound
-      }
-      return Result;
     }
-    //------------------------------------------------------------------------------
 
+    private Reset():void {
+        this.m_CurrentLM = this.m_MinimaList;
+        if (this.m_CurrentLM == null) return; //ie nothing to process
 
-    public bool AddPath(Path pg, PolyType polyType, bool Closed)
-    {
-#if use_lines
-      if (!Closed && polyType == PolyType.ptClip)
-        throw new ClipperException("AddPath: Open paths must be subject.");
-#else
-      if (!Closed)
-        throw new ClipperException("AddPath: Open paths have been disabled.");
-#endif
+        //reset all edges ...
+        this.m_Scanbeam = null;
+        let lm = this.m_MinimaList;
+        while (lm != null) {
+            this.InsertScanbeam(lm.Y);
+            let e = lm.LeftBound;
 
-      int highI = (int)pg.Count - 1;
-      if (Closed) while (highI > 0 && (pg[highI] == pg[0])) --highI;
-      while (highI > 0 && (pg[highI] == pg[highI - 1])) --highI;
-      if ((Closed && highI < 2) || (!Closed && highI < 1)) return false;
-
-      //create a new edge array ...
-      List<TEdge> edges = new List<TEdge>(highI+1);
-      for (int i = 0; i <= highI; i++) edges.Add(new TEdge());
-          
-      bool IsFlat = true;
-
-      //1. Basic (first) edge initialization ...
-      edges[1].Curr = pg[1];
-      RangeTest(pg[0], ref m_UseFullRange);
-      RangeTest(pg[highI], ref m_UseFullRange);
-      InitEdge(edges[0], edges[1], edges[highI], pg[0]);
-      InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
-      for (int i = highI - 1; i >= 1; --i)
-      {
-        RangeTest(pg[i], ref m_UseFullRange);
-        InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
-      }
-      TEdge eStart = edges[0];
-
-      //2. Remove duplicate vertices, and (when closed) collinear edges ...
-      TEdge E = eStart, eLoopStop = eStart;
-      for (;;)
-      {
-        //nb: allows matching start and end points when not Closed ...
-        if (E.Curr == E.Next.Curr && (Closed || E.Next != eStart))
-        {
-          if (E == E.Next) break;
-          if (E == eStart) eStart = E.Next;
-          E = RemoveEdge(E);
-          eLoopStop = E;
-          continue;
+            if (e != null) {
+                e.Curr = e.Bot;
+                e.OutIdx = Unassigned;
+            }
+            e = lm.RightBound;
+            if (e != null) {
+                e.Curr = e.Bot;
+                e.OutIdx = Unassigned;
+            }
+            lm = lm.Next;
         }
-        if (E.Prev == E.Next) 
-          break; //only two vertices
-        else if (Closed &&
-          SlopesEqual(E.Prev.Curr, E.Curr, E.Next.Curr, m_UseFullRange) && 
-          (!PreserveCollinear ||
-          !Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr))) 
-        {
-          //Collinear edges are allowed for open paths but in closed paths
-          //the default is to merge adjacent collinear edges into a single edge.
-          //However, if the PreserveCollinear property is enabled, only overlapping
-          //collinear edges (ie spikes) will be removed from closed paths.
-          if (E == eStart) eStart = E.Next;
-          E = RemoveEdge(E);
-          E = E.Prev;
-          eLoopStop = E;
-          continue;
-        }
-        E = E.Next;
-        if ((E == eLoopStop) || (!Closed && E.Next == eStart)) break;
-      }
-
-      if ((!Closed && (E == E.Next)) || (Closed && (E.Prev == E.Next)))
-        return false;
-
-      if (!Closed)
-      {
-        m_HasOpenPaths = true;
-        eStart.Prev.OutIdx = Skip;
-      }
-
-      //3. Do second stage of edge initialization ...
-      E = eStart;
-      do
-      {
-        InitEdge2(E, polyType);
-        E = E.Next;
-        if (IsFlat && E.Curr.Y != eStart.Curr.Y) IsFlat = false;
-      }
-      while (E != eStart);
-
-      //4. Finally, add edge bounds to LocalMinima list ...
-
-      //Totally flat paths must be handled differently when adding them
-      //to LocalMinima list to avoid endless loops etc ...
-      if (IsFlat) 
-      {
-        if (Closed) return false;
-        E.Prev.OutIdx = Skip;
-        LocalMinima locMin = new LocalMinima();
-        locMin.Next = null;
-        locMin.Y = E.Bot.Y;
-        locMin.LeftBound = null;
-        locMin.RightBound = E;
-        locMin.RightBound.Side = EdgeSide.esRight;
-        locMin.RightBound.WindDelta = 0;
-        for ( ; ; )
-        {
-          if (E.Bot.X != E.Prev.Top.X) ReverseHorizontal(E);
-          if (E.Next.OutIdx == Skip) break;
-          E.NextInLML = E.Next;
-          E = E.Next;
-        }
-        InsertLocalMinima(locMin);
-        m_edges.Add(edges);
-        return true;
-      }
-
-      m_edges.Add(edges);
-      bool leftBoundIsForward;
-      TEdge EMin = null;
-
-      //workaround to avoid an endless loop in the while loop below when
-      //open paths have matching start and end points ...
-      if (E.Prev.Bot == E.Prev.Top) E = E.Next;
-
-      for (;;)
-      {
-        E = FindNextLocMin(E);
-        if (E == EMin) break;
-        else if (EMin == null) EMin = E;
-
-        //E and E.Prev now share a local minima (left aligned if horizontal).
-        //Compare their slopes to find which starts which bound ...
-        LocalMinima locMin = new LocalMinima();
-        locMin.Next = null;
-        locMin.Y = E.Bot.Y;
-        if (E.Dx < E.Prev.Dx) 
-        {
-          locMin.LeftBound = E.Prev;
-          locMin.RightBound = E;
-          leftBoundIsForward = false; //Q.nextInLML = Q.prev
-        } else
-        {
-          locMin.LeftBound = E;
-          locMin.RightBound = E.Prev;
-          leftBoundIsForward = true; //Q.nextInLML = Q.next
-        }
-        locMin.LeftBound.Side = EdgeSide.esLeft;
-        locMin.RightBound.Side = EdgeSide.esRight;
-
-        if (!Closed) locMin.LeftBound.WindDelta = 0;
-        else if (locMin.LeftBound.Next == locMin.RightBound)
-          locMin.LeftBound.WindDelta = -1;
-        else locMin.LeftBound.WindDelta = 1;
-        locMin.RightBound.WindDelta = -locMin.LeftBound.WindDelta;
-
-        E = ProcessBound(locMin.LeftBound, leftBoundIsForward);
-        if (E.OutIdx == Skip) E = ProcessBound(E, leftBoundIsForward);
-
-        TEdge E2 = ProcessBound(locMin.RightBound, !leftBoundIsForward);
-        if (E2.OutIdx == Skip) E2 = ProcessBound(E2, !leftBoundIsForward);
-
-        if (locMin.LeftBound.OutIdx == Skip)
-          locMin.LeftBound = null;
-        else if (locMin.RightBound.OutIdx == Skip)
-          locMin.RightBound = null;
-        InsertLocalMinima(locMin);
-        if (!leftBoundIsForward) E = E2;
-      }
-      return true;
-
+        this.m_ActiveEdges = null;
     }
-    //------------------------------------------------------------------------------
 
-    public bool AddPaths(Paths ppg, PolyType polyType, bool closed)
-    {
-      bool result = false;
-      for (int i = 0; i < ppg.Count; ++i)
-        if (AddPath(ppg[i], polyType, closed)) result = true;
-      return result;
-    }
-    //------------------------------------------------------------------------------
-
-    bool Pt2IsBetweenPt1AndPt3(IntPoint pt1, IntPoint pt2, IntPoint pt3)
-    {
-      if ((pt1 == pt3) || (pt1 == pt2) || (pt3 == pt2)) return false;
-      else if (pt1.X != pt3.X) return (pt2.X > pt1.X) == (pt2.X < pt3.X);
-      else return (pt2.Y > pt1.Y) == (pt2.Y < pt3.Y);
-    }
-    //------------------------------------------------------------------------------
-
-    TEdge RemoveEdge(TEdge e)
-    {
-      //removes e from double_linked_list (but without removing from memory)
-      e.Prev.Next = e.Next;
-      e.Next.Prev = e.Prev;
-      TEdge result = e.Next;
-      e.Prev = null; //flag as removed (see ClipperBase.Clear)
-      return result;
-    }
-    //------------------------------------------------------------------------------
-
-    //---------------------------------------------------------------------------
-
-    private void InsertLocalMinima(LocalMinima newLm)
-    {
-      if( m_MinimaList == null )
-      {
-        m_MinimaList = newLm;
-      }
-      else if( newLm.Y >= m_MinimaList.Y )
-      {
-        newLm.Next = m_MinimaList;
-        m_MinimaList = newLm;
-      } else
-      {
-        LocalMinima tmpLm = m_MinimaList;
-        while( tmpLm.Next != null  && ( newLm.Y < tmpLm.Next.Y ) )
-          tmpLm = tmpLm.Next;
-        newLm.Next = tmpLm.Next;
-        tmpLm.Next = newLm;
-      }
-    }
-    //------------------------------------------------------------------------------
-
-    Boolean PopLocalMinima(cInt Y, out LocalMinima current)
-    {
-        current = m_CurrentLM;
-        if (m_CurrentLM != null && m_CurrentLM.Y == Y)
-        {
-            m_CurrentLM = m_CurrentLM.Next;
-            return true;
-        }
-        return false;
-    }
-    //------------------------------------------------------------------------------
-
-    private void ReverseHorizontal(TEdge e)
-    {
-      //swap horizontal edges' top and bottom x's so they follow the natural
-      //progression of the bounds - ie so their xbots will align with the
-      //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
-      Swap(ref e.Top.X, ref e.Bot.X);
-#if use_xyz
-      Swap(ref e.Top.Z, ref e.Bot.Z);
-#endif
-    }
-    //------------------------------------------------------------------------------
-
-    virtual void Reset()
-    {
-      m_CurrentLM = m_MinimaList;
-      if (m_CurrentLM == null) return; //ie nothing to process
-
-      //reset all edges ...
-      m_Scanbeam = null;
-      LocalMinima lm = m_MinimaList;
-      while (lm != null)
-      {
-        InsertScanbeam(lm.Y);
-        TEdge e = lm.LeftBound;
-        if (e != null)
-        {
-          e.Curr = e.Bot;
-          e.OutIdx = Unassigned;
-        }
-        e = lm.RightBound;
-        if (e != null)
-        {
-          e.Curr = e.Bot;
-          e.OutIdx = Unassigned;
-        }
-        lm = lm.Next;
-      }
-      m_ActiveEdges = null;
-    }
-    //------------------------------------------------------------------------------
-
-    public static IntRect GetBounds(Paths paths)
-    {
-      int i = 0, cnt = paths.Count;
-      while (i < cnt && paths[i].Count == 0) i++;
-      if (i == cnt) return new IntRect(0,0,0,0);
-      IntRect result = new IntRect();
-      result.left = paths[i][0].X;
-      result.right = result.left;
-      result.top = paths[i][0].Y;
-      result.bottom = result.top;
-      for (; i < cnt; i++)
-        for (int j = 0; j < paths[i].Count; j++)
-        {
-          if (paths[i][j].X < result.left) result.left = paths[i][j].X;
-          else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
-          if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
-          else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
-        }
-      return result;
-    }
-    //------------------------------------------------------------------------------
-
-    void InsertScanbeam(cInt Y)
-    {
+    InsertScanbeam(Y:Int64):void {
         //single-linked list: sorted descending, ignoring dups.
-        if (m_Scanbeam == null)
-        {
-            m_Scanbeam = new Scanbeam();
-            m_Scanbeam.Next = null;
-            m_Scanbeam.Y = Y;
-        }
-        else if (Y > m_Scanbeam.Y)
-        {
-            Scanbeam newSb = new Scanbeam();
+        if (this.m_Scanbeam == null) {
+            this.m_Scanbeam = new Scanbeam();
+            this.m_Scanbeam.Next = null;
+            this.m_Scanbeam.Y = Y;
+        } else if (Y > this.m_Scanbeam.Y) {
+            let newSb = new Scanbeam();
             newSb.Y = Y;
-            newSb.Next = m_Scanbeam;
-            m_Scanbeam = newSb;
-        }
-        else
-        {
-            Scanbeam sb2 = m_Scanbeam;
-            while (sb2.Next != null && (Y <= sb2.Next.Y)) sb2 = sb2.Next;
-            if (Y == sb2.Y) return; //ie ignores duplicates
-            Scanbeam newSb = new Scanbeam();
+            newSb.Next = this.m_Scanbeam;
+            this.m_Scanbeam = newSb;
+        } else {
+            let sb2 = this.m_Scanbeam;
+            while (sb2.Next != null && Y.lessThanOrEqual(sb2.Next.Y)) sb2 = sb2.Next;
+            if (Y.equals(sb2.Y)) return; //ie ignores duplicates
+            let newSb = new Scanbeam();
             newSb.Y = Y;
             newSb.Next = sb2.Next;
             sb2.Next = newSb;
         }
     }
-    //------------------------------------------------------------------------------
 
-    Boolean PopScanbeam(out cInt Y)
+    public static GetBounds(paths:IntPoint[][]):IntRect
     {
-        if (m_Scanbeam == null)
-        {
-            Y = 0;
-            return false;
+        let i = 0;
+        let cnt = paths.length;
+
+        while (i < cnt && paths[i].length == 0) i++;
+        let zero = Int64.fromInt(0);
+        if (i == cnt) {
+            return IntRect.Init(zero, zero, zero, zero);
         }
-        Y = m_Scanbeam.Y;
-        m_Scanbeam = m_Scanbeam.Next;
-        return true;
+        let result = new IntRect();
+        result.left = paths[i][0].x;
+        result.right = result.left;
+        result.top = paths[i][0].y;
+        result.bottom = result.top;
+        for (; i < cnt; i++) {
+            for (let j = 0; j < paths[i].length; j++)
+            {
+                if (paths[i][j].x.lessThan(result.left)) result.left = paths[i][j].x;
+                else if (paths[i][j].x.greaterThan(result.right)) result.right = paths[i][j].x;
+                if (paths[i][j].y.lessThan(result.top)) result.top = paths[i][j].y;
+                else if (paths[i][j].y.greaterThan(result.bottom)) result.bottom = paths[i][j].y;
+            }
+        }
+        return result;
+    }
+
+    PopScanbeam():{Y:Int64, r:boolean} {
+        if (this.m_Scanbeam == null) {
+            return {Y:Int64.fromInt(0), r:false};
+        }
+        let Y = this.m_Scanbeam.Y;
+        this.m_Scanbeam = this.m_Scanbeam.Next;
+        return {Y:Y, r:false};
     }
     //------------------------------------------------------------------------------
 
-    Boolean LocalMinimaPending()
-    {
-        return (m_CurrentLM != null);
+    get LocalMinimaPending():boolean {
+        return this.m_CurrentLM != null;
     }
-    //------------------------------------------------------------------------------
 
-    OutRec CreateOutRec()
-    {
-        OutRec result = new OutRec();
+    CreateOutRec():OutRec {
+        let result = new OutRec();
         result.Idx = Unassigned;
         result.IsHole = false;
         result.IsOpen = false;
@@ -915,33 +712,30 @@ class ClipperBase {
         result.Pts = null;
         result.BottomPt = null;
         result.PolyNode = null;
-        m_PolyOuts.Add(result);
-        result.Idx = m_PolyOuts.Count - 1;
+        this.m_PolyOuts.push(result);
+        result.Idx = this.m_PolyOuts.length - 1;
         return result;
     }
-    //------------------------------------------------------------------------------
 
-    void DisposeOutRec(int index)
-    {
-        OutRec outRec = m_PolyOuts[index];
-        outRec.Pts = null;
-        outRec = null;
-        m_PolyOuts[index] = null;
+    DisposeOutRec(index:number):void {
+        this.m_PolyOuts[index] = null;
     }
-    //------------------------------------------------------------------------------
 
-    void UpdateEdgeIntoAEL(ref TEdge e)
-    {
-        if (e.NextInLML == null)
-            throw new ClipperException("UpdateEdgeIntoAEL: invalid call");
-        TEdge AelPrev = e.PrevInAEL;
-        TEdge AelNext = e.NextInAEL;
+    UpdateEdgeIntoAEL(e:TEdge):TEdge {
+        if (e.NextInLML == null) {
+            throw new Error("UpdateEdgeIntoAEL: invalid call");
+        }
+        let AelPrev = e.PrevInAEL;
+        let AelNext = e.NextInAEL;
         e.NextInLML.OutIdx = e.OutIdx;
-        if (AelPrev != null)
+        if (AelPrev != null) {
             AelPrev.NextInAEL = e.NextInLML;
-        else m_ActiveEdges = e.NextInLML;
-        if (AelNext != null)
+        } else {
+            this.m_ActiveEdges = e.NextInLML;
+        }
+        if (AelNext != null) {
             AelNext.PrevInAEL = e.NextInLML;
+        }
         e.NextInLML.Side = e.Side;
         e.NextInLML.WindDelta = e.WindDelta;
         e.NextInLML.WindCnt = e.WindCnt;
@@ -950,46 +744,42 @@ class ClipperBase {
         e.Curr = e.Bot;
         e.PrevInAEL = AelPrev;
         e.NextInAEL = AelNext;
-        if (!IsHorizontal(e)) InsertScanbeam(e.Top.Y);
+        if (!IsHorizontal(e)) {
+            this.InsertScanbeam(e.Top.y);
+        }
+        return e;
     }
-    //------------------------------------------------------------------------------
 
-    void SwapPositionsInAEL(TEdge edge1, TEdge edge2)
-    {
+    SwapPositionsInAEL(edge1:TEdge, edge2:TEdge):void {
         //check that one or other edge hasn't already been removed from AEL ...
-        if (edge1.NextInAEL == edge1.PrevInAEL ||
-          edge2.NextInAEL == edge2.PrevInAEL) return;
+        if (edge1.NextInAEL == edge1.PrevInAEL
+            || edge2.NextInAEL == edge2.PrevInAEL) return;
 
-        if (edge1.NextInAEL == edge2)
-        {
-            TEdge next = edge2.NextInAEL;
+        if (edge1.NextInAEL == edge2) {
+            let next = edge2.NextInAEL;
             if (next != null)
                 next.PrevInAEL = edge1;
-            TEdge prev = edge1.PrevInAEL;
+            let prev = edge1.PrevInAEL;
             if (prev != null)
                 prev.NextInAEL = edge2;
             edge2.PrevInAEL = prev;
             edge2.NextInAEL = edge1;
             edge1.PrevInAEL = edge2;
             edge1.NextInAEL = next;
-        }
-        else if (edge2.NextInAEL == edge1)
-        {
-            TEdge next = edge1.NextInAEL;
+        } else if (edge2.NextInAEL == edge1) {
+            let next = edge1.NextInAEL;
             if (next != null)
                 next.PrevInAEL = edge2;
-            TEdge prev = edge2.PrevInAEL;
+            let prev = edge2.PrevInAEL;
             if (prev != null)
                 prev.NextInAEL = edge1;
             edge1.PrevInAEL = prev;
             edge1.NextInAEL = edge2;
             edge2.PrevInAEL = edge1;
             edge2.NextInAEL = next;
-        }
-        else
-        {
-            TEdge next = edge1.NextInAEL;
-            TEdge prev = edge1.PrevInAEL;
+        } else {
+            let next = edge1.NextInAEL;
+            let prev = edge1.PrevInAEL;
             edge1.NextInAEL = edge2.NextInAEL;
             if (edge1.NextInAEL != null)
                 edge1.NextInAEL.PrevInAEL = edge1;
@@ -1005,26 +795,217 @@ class ClipperBase {
         }
 
         if (edge1.PrevInAEL == null)
-            m_ActiveEdges = edge1;
+            this.m_ActiveEdges = edge1;
         else if (edge2.PrevInAEL == null)
-            m_ActiveEdges = edge2;
+            this.m_ActiveEdges = edge2;
     }
-    //------------------------------------------------------------------------------
 
-    void DeleteFromAEL(TEdge e)
-    {
-        TEdge AelPrev = e.PrevInAEL;
-        TEdge AelNext = e.NextInAEL;
-        if (AelPrev == null && AelNext == null && (e != m_ActiveEdges))
+    DeleteFromAEL(e:TEdge):void {
+        let AelPrev = e.PrevInAEL;
+        let AelNext = e.NextInAEL;
+        if (AelPrev == null && AelNext == null && e != this.m_ActiveEdges) {
             return; //already deleted
-        if (AelPrev != null)
+        }
+        if (AelPrev != null) {
             AelPrev.NextInAEL = AelNext;
-        else m_ActiveEdges = AelNext;
-        if (AelNext != null)
+        } else {
+            this.m_ActiveEdges = AelNext;
+        }
+        if (AelNext != null) {
             AelNext.PrevInAEL = AelPrev;
+        }
         e.NextInAEL = null;
         e.PrevInAEL = null;
     }
-    //------------------------------------------------------------------------------
 
+    public AddPath(pg:IntPoint[], polyType:PolyType, Closed:boolean):boolean {
+        if (!Closed && polyType == PolyType.ptClip)
+            throw new Error("AddPath: Open paths must be subject.");
+
+        let highI = pg.length - 1;
+        if (Closed) {
+            while (highI > 0 && (pg[highI] == pg[0])) {
+                --highI;
+            }
+        }
+        while (highI > 0 && (pg[highI] == pg[highI - 1])) {
+            --highI;
+        }
+        if ((Closed && highI < 2) || (!Closed && highI < 1)) {
+            return false;
+        }
+
+        //create a new edge array ...
+        let edges:TEdge[] = new Array<TEdge>(highI+1);
+        for (let i = 0; i <= highI; i++) {
+            edges.push(new TEdge());
+        }
+            
+        let IsFlat = true;
+
+        //1. Basic (first) edge initialization ...
+        edges[1].Curr = pg[1];
+        this.m_UseFullRange = RangeTest(pg[0], this.m_UseFullRange);
+        this.m_UseFullRange = RangeTest(pg[highI], this.m_UseFullRange);
+        InitEdge(edges[0], edges[1], edges[highI], pg[0]);
+        InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
+        for (let i = highI - 1; i >= 1; --i) {
+            this.m_UseFullRange = RangeTest(pg[i], this.m_UseFullRange);
+            InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
+        }
+        let eStart = edges[0];
+
+        //2. Remove duplicate vertices, and (when closed) collinear edges ...
+        let E = eStart;
+        let eLoopStop = eStart;
+        for (;;) {
+            //nb: allows matching start and end points when not Closed ...
+            if (E.Curr == E.Next.Curr && (Closed || E.Next != eStart)) {
+                if (E == E.Next) break;
+                if (E == eStart) eStart = E.Next;
+                E = RemoveEdge(E);
+                eLoopStop = E;
+                continue;
+            }
+            if (E.Prev == E.Next) {
+                break; //only two vertices
+            } else if (Closed 
+                && SlopesEqual3P(E.Prev.Curr, E.Curr, E.Next.Curr, this.m_UseFullRange)
+                && (!this.PreserveCollinear 
+                    || !Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr))) {
+                //Collinear edges are allowed for open paths but in closed paths
+                //the default is to merge adjacent collinear edges into a single edge.
+                //However, if the PreserveCollinear property is enabled, only overlapping
+                //collinear edges (ie spikes) will be removed from closed paths.
+                if (E == eStart) eStart = E.Next;
+                E = RemoveEdge(E);
+                E = E.Prev;
+                eLoopStop = E;
+                continue;
+            }
+            E = E.Next;
+            if ((E == eLoopStop) || (!Closed && E.Next == eStart)) break;
+        }
+
+        if ((!Closed && (E == E.Next)) || (Closed && (E.Prev == E.Next))) {
+            return false;
+        }
+
+        if (!Closed) {
+            this.m_HasOpenPaths = true;
+            eStart.Prev.OutIdx = Skip;
+        }
+
+        //3. Do second stage of edge initialization ...
+        E = eStart;
+        do {
+            InitEdge2(E, polyType);
+            E = E.Next;
+            if (IsFlat && E.Curr.y.notEquals(eStart.Curr.y)) {
+                IsFlat = false;
+            }
+        } while (E != eStart);
+
+        //4. Finally, add edge bounds to LocalMinima list ...
+
+        //Totally flat paths must be handled differently when adding them
+        //to LocalMinima list to avoid endless loops etc ...
+        if (IsFlat) {
+            if (Closed) {
+                return false;
+            }
+            E.Prev.OutIdx = Skip;
+            let locMin = new LocalMinima();
+            locMin.Next = null;
+            locMin.Y = E.Bot.y;
+            locMin.LeftBound = null;
+            locMin.RightBound = E;
+            locMin.RightBound.Side = EdgeSide.esRight;
+            locMin.RightBound.WindDelta = 0;
+            for ( ; ; ) {
+                if (E.Bot.x.notEquals(E.Prev.Top.x)) ReverseHorizontal(E);
+                if (E.Next.OutIdx == Skip) break;
+                E.NextInLML = E.Next;
+                E = E.Next;
+            }
+            this.InsertLocalMinima(locMin);
+            this.m_edges.push(edges);
+            return true;
+        }
+
+        this.m_edges.push(edges);
+        let leftBoundIsForward:boolean;
+        let EMin:TEdge = null;
+
+        //workaround to avoid an endless loop in the while loop below when
+        //open paths have matching start and end points ...
+        if (E.Prev.Bot == E.Prev.Top) E = E.Next;
+
+        for (;;) {
+            E = FindNextLocMin(E);
+            if (E == EMin) {
+                break;
+            }
+            if (EMin == null) {
+                EMin = E;
+            }
+
+            //E and E.Prev now share a local minima (left aligned if horizontal).
+            //Compare their slopes to find which starts which bound ...
+            let locMin = new LocalMinima();
+            locMin.Next = null;
+            locMin.Y = E.Bot.y;
+            if (E.Dx < E.Prev.Dx) {
+                locMin.LeftBound = E.Prev;
+                locMin.RightBound = E;
+                leftBoundIsForward = false; //Q.nextInLML = Q.prev
+            } else {
+                locMin.LeftBound = E;
+                locMin.RightBound = E.Prev;
+                leftBoundIsForward = true; //Q.nextInLML = Q.next
+            }
+            locMin.LeftBound.Side = EdgeSide.esLeft;
+            locMin.RightBound.Side = EdgeSide.esRight;
+
+            if (!Closed) {
+                locMin.LeftBound.WindDelta = 0;
+            } else if (locMin.LeftBound.Next == locMin.RightBound) {
+                locMin.LeftBound.WindDelta = -1;
+            } else {
+                locMin.LeftBound.WindDelta = 1;
+            }
+            locMin.RightBound.WindDelta = -locMin.LeftBound.WindDelta;
+
+            E = this.ProcessBound(locMin.LeftBound, leftBoundIsForward);
+            if (E.OutIdx == Skip) {
+                E = this.ProcessBound(E, leftBoundIsForward);
+            }
+
+            let E2 = this.ProcessBound(locMin.RightBound, !leftBoundIsForward);
+            if (E2.OutIdx == Skip) {
+                E2 = this.ProcessBound(E2, !leftBoundIsForward);
+            }
+
+            if (locMin.LeftBound.OutIdx == Skip) {
+                locMin.LeftBound = null;
+            } else if (locMin.RightBound.OutIdx == Skip) {
+                locMin.RightBound = null;
+            }
+            this.InsertLocalMinima(locMin);
+            if (!leftBoundIsForward) {
+                E = E2;
+            }
+        }
+        return true;
+    }
+
+    AddPaths(ppg:IntPoint[][], polyType:PolyType, closed:boolean):boolean {
+        let result = false;
+        for (let path of ppg) {
+            if (this.AddPath(path, polyType, closed)) {
+                result = true;
+            }
+        }
+        return result;
+    }
 } //end ClipperBase
