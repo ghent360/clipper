@@ -71,6 +71,15 @@ class IntPoint {
     public static copy(other:IntPoint):IntPoint {
         return new IntPoint(other.x, other.y);
     }
+
+    public static Swap(first:IntPoint, second:IntPoint):void {
+        let tmpX = first.x.clone();
+        let tmpY = first.y.clone();
+        first.x = second.x;
+        first.y = second.y;
+        second.x = tmpX;
+        second.y = tmpY;
+    }
 }
 
 class DoublePoint {
@@ -471,6 +480,24 @@ function E2InsertsBeforeE1(e1:TEdge, e2:TEdge):boolean {
         return e1.Top.x.greaterThan(TopX(e2, e1.Top.y));
     }
     return e2.Curr.x.lessThan(e1.Curr.x);
+}
+
+function HorzSegmentsOverlap(
+    s1a:Int64, s1b:Int64, s2a:Int64, s2b:Int64):boolean {
+    let seg1a = s1a.clone();
+    let seg1b = s1b.clone();
+    let seg2a = s2a.clone();
+    let seg2b = s2b.clone();
+    if (seg1a.greaterThan(seg1b)) Int64.Swap(seg1a, seg1b);
+    if (seg2a.greaterThan(seg2b)) Int64.Swap(seg2a, seg2b);
+    return seg1a.lessThan(seg2b) && seg2a.lessThan(seg1b);
+}
+
+function GetDx(pt1:IntPoint, pt2:IntPoint):number {
+    if (pt1.y.equals(pt2.y)) {
+        return horizontal;
+    }
+    return pt2.x.sub(pt1.x).div(pt2.y.sub(pt1.y)).toNumber();
 }
 
 class ClipperBase {
@@ -1585,150 +1612,144 @@ export class Clipper extends ClipperBase {
             }
         }
     }
-      
 
-      private void AddEdgeToSEL(TEdge edge)
-      {
+    private AddEdgeToSEL(edge:TEdge):void {
         //SEL pointers in PEdge are use to build transient lists of horizontal edges.
         //However, since we don't need to worry about processing order, all additions
         //are made to the front of the list ...
-        if (m_SortedEdges == null)
-        {
+        if (m_SortedEdges == null) {
             m_SortedEdges = edge;
             edge.PrevInSEL = null;
             edge.NextInSEL = null;
-        }
-        else
-        {
+        } else {
             edge.NextInSEL = m_SortedEdges;
             edge.PrevInSEL = null;
             m_SortedEdges.PrevInSEL = edge;
             m_SortedEdges = edge;
         }
-      }
-      
+    }
 
-      internal Boolean PopEdgeFromSEL(out TEdge e)
-      {
+    PopEdgeFromSEL():TEdge {
         //Pop edge from front of SEL (ie SEL is a FILO list)
-        e = m_SortedEdges;
-        if (e == null) return false;
-        TEdge oldE = e;
-        m_SortedEdges = e.NextInSEL;
-        if (m_SortedEdges != null) m_SortedEdges.PrevInSEL = null;
+        if (this.m_SortedEdges == null) {
+            return null;
+        }
+        let oldE = this.m_SortedEdges;
+        this.m_SortedEdges = this.m_SortedEdges.NextInSEL;
+        if (this.m_SortedEdges != null) {
+            this.m_SortedEdges.PrevInSEL = null;
+        }
         oldE.NextInSEL = null;
         oldE.PrevInSEL = null;
         return true;
-      }
-      
+    }
      
-      private void CopyAELToSEL()
-      {
-          TEdge e = m_ActiveEdges;
-          m_SortedEdges = e;
-          while (e != null)
-          {
-              e.PrevInSEL = e.PrevInAEL;
-              e.NextInSEL = e.NextInAEL;
-              e = e.NextInAEL;
-          }
-      }
-      
-
-      private void SwapPositionsInSEL(TEdge edge1, TEdge edge2)
-      {
-          if (edge1.NextInSEL == null && edge1.PrevInSEL == null)
-              return;
-          if (edge2.NextInSEL == null && edge2.PrevInSEL == null)
-              return;
-
-          if (edge1.NextInSEL == edge2)
-          {
-              TEdge next = edge2.NextInSEL;
-              if (next != null)
-                  next.PrevInSEL = edge1;
-              TEdge prev = edge1.PrevInSEL;
-              if (prev != null)
-                  prev.NextInSEL = edge2;
-              edge2.PrevInSEL = prev;
-              edge2.NextInSEL = edge1;
-              edge1.PrevInSEL = edge2;
-              edge1.NextInSEL = next;
-          }
-          else if (edge2.NextInSEL == edge1)
-          {
-              TEdge next = edge1.NextInSEL;
-              if (next != null)
-                  next.PrevInSEL = edge2;
-              TEdge prev = edge2.PrevInSEL;
-              if (prev != null)
-                  prev.NextInSEL = edge1;
-              edge1.PrevInSEL = prev;
-              edge1.NextInSEL = edge2;
-              edge2.PrevInSEL = edge1;
-              edge2.NextInSEL = next;
-          }
-          else
-          {
-              TEdge next = edge1.NextInSEL;
-              TEdge prev = edge1.PrevInSEL;
-              edge1.NextInSEL = edge2.NextInSEL;
-              if (edge1.NextInSEL != null)
-                  edge1.NextInSEL.PrevInSEL = edge1;
-              edge1.PrevInSEL = edge2.PrevInSEL;
-              if (edge1.PrevInSEL != null)
-                  edge1.PrevInSEL.NextInSEL = edge1;
-              edge2.NextInSEL = next;
-              if (edge2.NextInSEL != null)
-                  edge2.NextInSEL.PrevInSEL = edge2;
-              edge2.PrevInSEL = prev;
-              if (edge2.PrevInSEL != null)
-                  edge2.PrevInSEL.NextInSEL = edge2;
-          }
-
-          if (edge1.PrevInSEL == null)
-              m_SortedEdges = edge1;
-          else if (edge2.PrevInSEL == null)
-              m_SortedEdges = edge2;
-      }
-      
-
-
-      private void AddLocalMaxPoly(TEdge e1, TEdge e2, IntPoint pt)
-      {
-          AddOutPt(e1, pt);
-          if (e2.WindDelta == 0) AddOutPt(e2, pt);
-          if (e1.OutIdx == e2.OutIdx)
-          {
-              e1.OutIdx = Unassigned;
-              e2.OutIdx = Unassigned;
-          }
-          else if (e1.OutIdx < e2.OutIdx) 
-              AppendPolygon(e1, e2);
-          else 
-              AppendPolygon(e2, e1);
-      }
-      
-
-      private OutPt AddLocalMinPoly(TEdge e1, TEdge e2, IntPoint pt)
-      {
-        OutPt result;
-        TEdge e, prevE;
-        if (IsHorizontal(e2) || (e1.Dx > e2.Dx))
-        {
-          result = AddOutPt(e1, pt);
-          e2.OutIdx = e1.OutIdx;
-          e1.Side = EdgeSide.esLeft;
-          e2.Side = EdgeSide.esRight;
-          e = e1;
-          if (e.PrevInAEL == e2)
-            prevE = e2.PrevInAEL; 
-          else
-            prevE = e.PrevInAEL;
+    private CopyAELToSEL():void {
+        let e = this.m_ActiveEdges;
+        this.m_SortedEdges = e;
+        while (e != null) {
+            e.PrevInSEL = e.PrevInAEL;
+            e.NextInSEL = e.NextInAEL;
+            e = e.NextInAEL;
         }
-        else
-        {
-          result = AddOutPt(e2, pt);
+    }
+
+    private SwapPositionsInSEL(edge1:TEdge, edge2:TEdge):void
+    {
+        if (edge1.NextInSEL == null && edge1.PrevInSEL == null) {
+            return;
+        }
+        if (edge2.NextInSEL == null && edge2.PrevInSEL == null) {
+            return;
+        }
+
+        if (edge1.NextInSEL == edge2) {
+            let next = edge2.NextInSEL;
+            if (next != null) {
+                next.PrevInSEL = edge1;
+            }
+            let prev = edge1.PrevInSEL;
+            if (prev != null) {
+                prev.NextInSEL = edge2;
+            }
+            edge2.PrevInSEL = prev;
+            edge2.NextInSEL = edge1;
+            edge1.PrevInSEL = edge2;
+            edge1.NextInSEL = next;
+        } else if (edge2.NextInSEL == edge1) {
+            let next = edge1.NextInSEL;
+            if (next != null) {
+                next.PrevInSEL = edge2;
+            }
+            let prev = edge2.PrevInSEL;
+            if (prev != null) {
+                prev.NextInSEL = edge1;
+            }
+            edge1.PrevInSEL = prev;
+            edge1.NextInSEL = edge2;
+            edge2.PrevInSEL = edge1;
+            edge2.NextInSEL = next;
+        } else {
+            let next = edge1.NextInSEL;
+            let prev = edge1.PrevInSEL;
+            edge1.NextInSEL = edge2.NextInSEL;
+            if (edge1.NextInSEL != null) {
+                edge1.NextInSEL.PrevInSEL = edge1;
+            }
+            edge1.PrevInSEL = edge2.PrevInSEL;
+            if (edge1.PrevInSEL != null) {
+                edge1.PrevInSEL.NextInSEL = edge1;
+            }
+            edge2.NextInSEL = next;
+            if (edge2.NextInSEL != null) {
+                edge2.NextInSEL.PrevInSEL = edge2;
+            }
+            edge2.PrevInSEL = prev;
+            if (edge2.PrevInSEL != null) {
+                edge2.PrevInSEL.NextInSEL = edge2;
+            }
+        }
+
+        if (edge1.PrevInSEL == null) {
+            m_SortedEdges = edge1;
+        } else if (edge2.PrevInSEL == null) {
+            m_SortedEdges = edge2;
+        }
+    }
+
+    private AddLocalMaxPoly(e1:TEdge, e2:TEdge, pt:IntPoint):void {
+        this.AddOutPt(e1, pt);
+        if (e2.WindDelta == 0) {
+            this.AddOutPt(e2, pt);
+        }
+        if (e1.OutIdx == e2.OutIdx) {
+            e1.OutIdx = Unassigned;
+            e2.OutIdx = Unassigned;
+        } else if (e1.OutIdx < e2.OutIdx) {
+            this.AppendPolygon(e1, e2);
+        } else {
+            this.AppendPolygon(e2, e1);
+        }
+    }
+
+    private AddLocalMinPoly(e1:TEdge, e2:TEdge, pt:IntPoint):OutPt {
+        let result:OutPt;
+        let e:TEdge;
+        let prevE:TEdge;
+        
+        if (IsHorizontal(e2) || e1.Dx > e2.Dx) {
+            result = this.AddOutPt(e1, pt);
+            e2.OutIdx = e1.OutIdx;
+            e1.Side = EdgeSide.esLeft;
+            e2.Side = EdgeSide.esRight;
+            e = e1;
+            if (e.PrevInAEL == e2) {
+                prevE = e2.PrevInAEL; 
+            } else {
+                prevE = e.PrevInAEL;
+            }
+        } else {
+          result = this.AddOutPt(e2, pt);
           e1.OutIdx = e2.OutIdx;
           e1.Side = EdgeSide.esRight;
           e2.Side = EdgeSide.esLeft;
@@ -1739,144 +1760,125 @@ export class Clipper extends ClipperBase {
               prevE = e.PrevInAEL;
         }
 
-        if (prevE != null && prevE.OutIdx >= 0 && prevE.Top.Y < pt.Y && e.Top.Y < pt.Y)
-        {
-          cInt xPrev = TopX(prevE, pt.Y);
-          cInt xE = TopX(e, pt.Y);
-          if ((xPrev == xE) && (e.WindDelta != 0) && (prevE.WindDelta != 0) &&
-            SlopesEqual(new IntPoint(xPrev, pt.Y), prevE.Top, new IntPoint(xE, pt.Y), e.Top, m_UseFullRange))
-          {
-            OutPt outPt = AddOutPt(prevE, pt);
-            AddJoin(result, outPt, e.Top);
-          }
+        if (prevE != null 
+            && prevE.OutIdx >= 0 
+            && prevE.Top.y.lessThan(pt.y)
+            && e.Top.y.lessThan(pt.y)) {
+            let xPrev = TopX(prevE, pt.Y);
+            let xE = TopX(e, pt.Y);
+            if (xPrev.equals(xE)
+                && e.WindDelta != 0
+                && prevE.WindDelta != 0
+                && SlopesEqual4P(
+                    new IntPoint(xPrev, pt.Y), prevE.Top, new IntPoint(xE, pt.Y), e.Top, m_UseFullRange)) {
+                let outPt = this.AddOutPt(prevE, pt);
+                this.AddJoin(result, outPt, e.Top);
+            }
         }
         return result;
-      }
+    }
       
 
-      private OutPt AddOutPt(TEdge e, IntPoint pt)
-      {
-          if (e.OutIdx < 0)
-          {
-              OutRec outRec = CreateOutRec();
-              outRec.IsOpen = (e.WindDelta == 0);
-              OutPt newOp = new OutPt();
-              outRec.Pts = newOp;
-              newOp.Idx = outRec.Idx;
-              newOp.Pt = pt;
-              newOp.Next = newOp;
-              newOp.Prev = newOp;
-              if (!outRec.IsOpen)
-                  SetHoleState(e, outRec);
-              e.OutIdx = outRec.Idx; //nb: do this after SetZ !
-              return newOp;
-          }
-          else
-          {
-              OutRec outRec = m_PolyOuts[e.OutIdx];
-              //OutRec.Pts is the 'Left-most' point & OutRec.Pts.Prev is the 'Right-most'
-              OutPt op = outRec.Pts;
-              bool ToFront = (e.Side == EdgeSide.esLeft);
-              if (ToFront && pt == op.Pt) return op;
-              else if (!ToFront && pt == op.Prev.Pt) return op.Prev;
+    private AddOutPt(e:TEdge, pt:IntPoint):OutPt {
+        if (e.OutIdx < 0) {
+            let outRec = CreateOutRec();
+            outRec.IsOpen = (e.WindDelta == 0);
+            let newOp = new OutPt();
+            outRec.Pts = newOp;
+            newOp.Idx = outRec.Idx;
+            newOp.Pt = pt;
+            newOp.Next = newOp;
+            newOp.Prev = newOp;
+            if (!outRec.IsOpen) {
+                this.SetHoleState(e, outRec);
+            }
+            e.OutIdx = outRec.Idx; //nb: do this after SetZ !
+            return newOp;
+        } else {
+            let outRec = this.m_PolyOuts[e.OutIdx];
+            //OutRec.Pts is the 'Left-most' point & OutRec.Pts.Prev is the 'Right-most'
+            let op = outRec.Pts;
+            let ToFront = (e.Side == EdgeSide.esLeft);
+            if (ToFront && pt.equals(op.Pt)) {
+                return op;
+            } else if (!ToFront && pt.equals(op.Prev.Pt)) {
+                return op.Prev;
+            }
 
-              OutPt newOp = new OutPt();
-              newOp.Idx = outRec.Idx;
-              newOp.Pt = pt;
-              newOp.Next = op;
-              newOp.Prev = op.Prev;
-              newOp.Prev.Next = newOp;
-              op.Prev = newOp;
-              if (ToFront) outRec.Pts = newOp;
-              return newOp;
-          }
-      }
-      
+            let newOp = new OutPt();
+            newOp.Idx = outRec.Idx;
+            newOp.Pt = pt;
+            newOp.Next = op;
+            newOp.Prev = op.Prev;
+            newOp.Prev.Next = newOp;
+            op.Prev = newOp;
+            if (ToFront) {
+                outRec.Pts = newOp;
+            }
+            return newOp;
+        }
+    }
 
-      private OutPt GetLastOutPt(TEdge e)
-      {
-        OutRec outRec = m_PolyOuts[e.OutIdx];
-        if (e.Side == EdgeSide.esLeft) 
+    private GetLastOutPt(e:TEdge):OutPt {
+        let outRec = this.m_PolyOuts[e.OutIdx];
+        if (e.Side == EdgeSide.esLeft) {
             return outRec.Pts;
-        else
-            return outRec.Pts.Prev;
-      }
-      
+        }
+        return outRec.Pts.Prev;
+    }
 
-      internal void SwapPoints(ref IntPoint pt1, ref IntPoint pt2)
-      {
-          IntPoint tmp = new IntPoint(pt1);
-          pt1 = pt2;
-          pt2 = tmp;
-      }
-      
-
-      private bool HorzSegmentsOverlap(cInt seg1a, cInt seg1b, cInt seg2a, cInt seg2b)
-      {
-        if (seg1a > seg1b) Swap(ref seg1a, ref seg1b);
-        if (seg2a > seg2b) Swap(ref seg2a, ref seg2b);
-        return (seg1a < seg2b) && (seg2a < seg1b);
-      }
-      
-  
-      private void SetHoleState(TEdge e, OutRec outRec)
-      {
-        TEdge e2 = e.PrevInAEL;
-        TEdge eTmp = null;  
-        while (e2 != null)
-          {
-            if (e2.OutIdx >= 0 && e2.WindDelta != 0) 
-            {
-              if (eTmp == null)
-                eTmp = e2;
-              else if (eTmp.OutIdx == e2.OutIdx)
-                eTmp = null; //paired               
+    private SetHoleState(e:TEdge, outRec:OutRec):void {
+        let e2 = e.PrevInAEL;
+        let eTmp:TEdge = null;  
+        while (e2 != null) {
+            if (e2.OutIdx >= 0 && e2.WindDelta != 0) {
+                if (eTmp == null) {
+                    eTmp = e2;
+                } else if (eTmp.OutIdx == e2.OutIdx) {
+                    eTmp = null; //paired
+                }
             }
             e2 = e2.PrevInAEL;
-          }
-
-        if (eTmp == null)
-        {
-          outRec.FirstLeft = null;
-          outRec.IsHole = false;
         }
-        else
-        {
-          outRec.FirstLeft = m_PolyOuts[eTmp.OutIdx];
-          outRec.IsHole = !outRec.FirstLeft.IsHole;
+
+        if (eTmp == null) {
+            outRec.FirstLeft = null;
+            outRec.IsHole = false;
+        } else {
+            outRec.FirstLeft = this.m_PolyOuts[eTmp.OutIdx];
+            outRec.IsHole = !outRec.FirstLeft.IsHole;
         }
-      }
-      
+    }
 
-      private double GetDx(IntPoint pt1, IntPoint pt2)
-      {
-          if (pt1.Y == pt2.Y) return horizontal;
-          else return (double)(pt2.X - pt1.X) / (pt2.Y - pt1.Y);
-      }
-      //---------------------------------------------------------------------------
-
-      private bool FirstIsBottomPt(OutPt btmPt1, OutPt btmPt2)
-      {
-        OutPt p = btmPt1.Prev;
-        while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Prev;
-        double dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+    private FirstIsBottomPt(btmPt1:OutPt, btmPt2:OutPt):boolean {
+        let p = btmPt1.Prev;
+        while (p.Pt.equals(btmPt1.Pt) && p != btmPt1) {
+            p = p.Prev;
+        }
+        let dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
         p = btmPt1.Next;
-        while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Next;
-        double dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+        while (p.Pt.equals(btmPt1.Pt) && p != btmPt1) {
+            p = p.Next;
+        }
+        let dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
 
         p = btmPt2.Prev;
-        while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Prev;
-        double dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+        while (p.Pt.equals(btmPt2.Pt) && p != btmPt2) {
+            p = p.Prev;
+        }
+        let dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
         p = btmPt2.Next;
-        while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Next;
-        double dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+        while (p.Pt.equals(btmPt2.Pt) && p != btmPt2) {
+            p = p.Next;
+        }
+        let dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
 
-        if (Math.Max(dx1p, dx1n) == Math.Max(dx2p, dx2n) &&
-          Math.Min(dx1p, dx1n) == Math.Min(dx2p, dx2n))
-          return Area(btmPt1) > 0; //if otherwise identical use orientation
-        else
-          return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
-      }
+        if (Math.Max(dx1p, dx1n) == Math.Max(dx2p, dx2n)
+            && Math.Min(dx1p, dx1n) == Math.Min(dx2p, dx2n)) {
+            return this.Area(btmPt1) > 0; //if otherwise identical use orientation
+        }
+        return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
+    }
       
 
       private OutPt GetBottomPt(OutPt pp)
