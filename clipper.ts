@@ -45,19 +45,31 @@ import {Int64, Int128} from "./intMath/int64";
 type Path=Array<IntPoint>;
 type Paths=Array<Array<IntPoint>>;
 
-enum ClipType {
+const Horizontal:number = -3.4E+38;
+const Skip:number = -2;
+const Unassigned:number = -1;
+const Tolerance:number = 1.0E-20;
+const loRange = new Int64(0x3FFFFFFF, 0);
+const hiRange = new Int64(0xFFFFFFFF, 0x3FFFFFFF); 
+const ioReverseSolution:number = 1;
+const ioStrictlySimple:number = 2;
+const ioPreserveCollinear:number = 4;
+const TwoPI = Math.PI * 2;
+const DefArcTolerance = 0.25;
+
+export enum ClipType {
     ctIntersection,
     ctUnion,
     ctDifference,
     ctXor
 }
 
-enum PolyType {
+export enum PolyType {
     ptSubject,
     ptClip
 }
   
-enum JoinType { 
+export enum JoinType {
     jtSquare, 
     jtRound, 
     jtMiter
@@ -67,14 +79,14 @@ enum JoinType {
 //EvenOdd & NonZero (GDI, GDI+, XLib, OpenGL, Cairo, AGG, Quartz, SVG, Gr32)
 //Others rules include Positive, Negative and ABS_GTR_EQ_TWO (only in OpenGL)
 //see http://glprogramming.com/red/chapter11.html
-enum PolyFillType {
+export enum PolyFillType {
     pftEvenOdd,
     pftNonZero,
     pftPositive,
     pftNegative
 }
 
-enum EndType { 
+export enum EndType { 
     etClosedPolygon, 
     etClosedLine, 
     etOpenButt, 
@@ -170,7 +182,7 @@ class IntRect {
     }
 }
 
-class PolyNode {
+export class PolyNode {
     public parent:PolyNode = null;
     public polygon:Path = new Array<IntPoint>();
     public index:number;
@@ -221,7 +233,7 @@ class PolyNode {
     }    
 }
 
-class PolyTree extends PolyNode {
+export class PolyTree extends PolyNode {
     public allPolys:Array<PolyNode> = new Array<PolyNode>();
 
     public clear():void {
@@ -273,10 +285,6 @@ class IntersectNode {
     pt:IntPoint;
 }
 
-function MyIntersectNodeSort(node1:IntersectNode, node2:IntersectNode):number {
-    return node2.pt.y.compare(node1.pt.y);
-}
-
 class LocalMinima {
     y:Int64;
     leftBound:TEdge;
@@ -320,20 +328,12 @@ class Join {
     offPt:IntPoint;
 }
 
-const horizontal:number = -3.4E+38;
-const Skip:number = -2;
-const Unassigned:number = -1;
-const tolerance:number = 1.0E-20;
-const loRange = new Int64(0x3FFFFFFF, 0);
-const hiRange = new Int64(0xFFFFFFFF, 0x3FFFFFFF); 
-const ioReverseSolution:number = 1;
-const ioStrictlySimple:number = 2;
-const ioPreserveCollinear:number = 4;
-const two_pi = Math.PI * 2;
-const def_arc_tolerance = 0.25;
+function MyIntersectNodeSort(node1:IntersectNode, node2:IntersectNode):number {
+    return node2.pt.y.compare(node1.pt.y);
+}
 
-function near_zero(val:number):boolean {
-    return Math.abs(val) < tolerance;
+function NearZero(val:number):boolean {
+    return Math.abs(val) < Tolerance;
 }
 
 function IsHorizontal(e:TEdge):boolean {
@@ -437,7 +437,7 @@ function SetDx(e:TEdge):void {
     e.delta.x = e.top.x.sub(e.bot.x);
     e.delta.y = e.top.y.sub(e.bot.y);
     if (e.delta.y.isZero()) {
-        e.dx = horizontal;
+        e.dx = Horizontal;
     } else {
         e.dx = e.delta.x.div(e.delta.y).toNumber();
     }
@@ -469,14 +469,14 @@ function FindNextLocMin(e:TEdge):TEdge {
         while (e.bot !== e.prev.bot || e.curr === e.top) {
             e = e.next;
         }
-        if (e.dx != horizontal && e.prev.dx != horizontal) {
+        if (e.dx != Horizontal && e.prev.dx != Horizontal) {
             break;
         }
-        while (e.prev.dx == horizontal) {
+        while (e.prev.dx == Horizontal) {
             e = e.prev;
         }
         e2 = e;
-        while (e.dx == horizontal) {
+        while (e.dx == Horizontal) {
             e = e.next;
         }
         if (e.top.y.equals(e.prev.bot.y)) {
@@ -546,7 +546,7 @@ function HorzSegmentsOverlap(
 
 function GetDx(pt1:IntPoint, pt2:IntPoint):number {
     if (pt1.y.equals(pt2.y)) {
-        return horizontal;
+        return Horizontal;
     }
     return pt2.x.sub(pt1.x).div(pt2.y.sub(pt1.y)).toNumber();
 }
@@ -1204,10 +1204,10 @@ class ClipperBase {
             E = Result;
             if (LeftBoundIsForward) {
                 while (E.top.y.equals(E.next.bot.y)) E = E.next;
-                while (E != Result && E.dx == horizontal) E = E.prev;
+                while (E != Result && E.dx == Horizontal) E = E.prev;
             } else {
                 while (E.top.y.equals(E.prev.bot.y)) E = E.prev;
-                while (E != Result && E.dx == horizontal) E = E.next;
+                while (E != Result && E.dx == Horizontal) E = E.next;
             }
             if (E == Result) {
                 Result = LeftBoundIsForward ? E.next : E.prev;
@@ -1226,12 +1226,12 @@ class ClipperBase {
             return Result;
         }
 
-        if (E.dx == horizontal) {
+        if (E.dx == Horizontal) {
             //We need to be careful with open paths because this may not be a
             //true local minima (ie E may be following a skip edge).
             //Also, consecutive horz. edges may start heading left before going right.
             EStart = LeftBoundIsForward ? E.prev : E.next;
-            if (EStart.dx == horizontal) {//ie an adjoining horizontal skip edge
+            if (EStart.dx == Horizontal) {//ie an adjoining horizontal skip edge
                 if (EStart.bot.x.notEquals(E.bot.x) 
                     && EStart.top.x .notEquals(E.bot.x)) {
                     ReverseHorizontal(E);
@@ -1248,12 +1248,12 @@ class ClipperBase {
                 Result = Result.next;
             }
 
-            if (Result.dx == horizontal && Result.next.outIdx != Skip) {
+            if (Result.dx == Horizontal && Result.next.outIdx != Skip) {
                 //nb: at the top of a bound, horizontals are added to the bound
                 //only when the preceding edge attaches to the horizontal's left vertex
                 //unless a Skip edge is encountered when that becomes the top divide
                 Horz = Result;
-                while (Horz.prev.dx == horizontal) Horz = Horz.prev;
+                while (Horz.prev.dx == Horizontal) Horz = Horz.prev;
                 if (Horz.prev.top.x.greaterThan(Result.next.top.x)) {
                     Result = Horz.prev;
                 }
@@ -1261,13 +1261,13 @@ class ClipperBase {
 
             while (E != Result) {
                 E.nextInLML = E.next;
-                if (E.dx == horizontal && E != EStart && E.bot.x.notEquals(E.prev.top.x)) { 
+                if (E.dx == Horizontal && E != EStart && E.bot.x.notEquals(E.prev.top.x)) { 
                     ReverseHorizontal(E);
                 }
                 E = E.next;
             }
 
-            if (E.dx == horizontal && E != EStart && E.bot.x.notEquals(E.prev.top.x)) { 
+            if (E.dx == Horizontal && E != EStart && E.bot.x.notEquals(E.prev.top.x)) { 
                 ReverseHorizontal(E);
             }
             Result = Result.next; //move to the edge just beyond current bound
@@ -1277,9 +1277,9 @@ class ClipperBase {
                 Result = Result.prev;
             }
 
-            if (Result.dx == horizontal && Result.prev.outIdx != Skip) {
+            if (Result.dx == Horizontal && Result.prev.outIdx != Skip) {
                 Horz = Result;
-                while (Horz.next.dx == horizontal) Horz = Horz.next;
+                while (Horz.next.dx == Horizontal) Horz = Horz.next;
                 if (Horz.next.top.x.greaterThanOrEqual(Result.prev.top.x)) {
                     Result = Horz.next;
                 }
@@ -1287,13 +1287,13 @@ class ClipperBase {
 
             while (E != Result) {
                 E.nextInLML = E.prev;
-                if (E.dx == horizontal && E != EStart && E.bot.x.notEquals(E.next.top.x)) {
+                if (E.dx == Horizontal && E != EStart && E.bot.x.notEquals(E.next.top.x)) {
                     ReverseHorizontal(E);
                 }
                 E = E.prev;
             }
 
-            if (E.dx == horizontal && E != EStart && E.bot.x.notEquals(E.next.top.x)) {
+            if (E.dx == Horizontal && E != EStart && E.bot.x.notEquals(E.next.top.x)) {
                 ReverseHorizontal(E);
             }
             Result = Result.prev; //move to the edge just beyond current bound
@@ -4069,7 +4069,7 @@ export class ClipperOffset {
     public ArcTolerance:number;
     public MiterLimit:number;
 
-    public constructor(miterLimit:number = 2.0, arcTolerance:number = def_arc_tolerance) {
+    public constructor(miterLimit:number = 2.0, arcTolerance:number = DefArcTolerance) {
         this.MiterLimit = miterLimit;
         this.ArcTolerance = arcTolerance;
         this.m_lowest.x = Int64.fromInt(-1);
@@ -4166,7 +4166,7 @@ export class ClipperOffset {
         this.m_delta = delta;
 
         //if Zero offset, just copy any CLOSED polygons to m_p and return ...
-        if (near_zero(delta)) {
+        if (NearZero(delta)) {
             //this.m_destPolys.Capacity = m_polyNodes.ChildCount;
             for (let i = 0; i < this.m_polyNodes.childCount; i++) {
                 let node = this.m_polyNodes.children[i];
@@ -4186,17 +4186,17 @@ export class ClipperOffset {
 
         let y:number;
         if (this.ArcTolerance <= 0.0) {
-            y = def_arc_tolerance;
-        } else if (this.ArcTolerance > Math.abs(delta) * def_arc_tolerance) {
-            y = Math.abs(delta) * def_arc_tolerance;
+            y = DefArcTolerance;
+        } else if (this.ArcTolerance > Math.abs(delta) * DefArcTolerance) {
+            y = Math.abs(delta) * DefArcTolerance;
         } else {
             y = this.ArcTolerance;
         }
         //see offset_triginometry2.svg in the documentation folder ...
         let steps = Math.PI / Math.acos(1 - y / Math.abs(delta));
-        this.m_sin = Math.sin(two_pi / steps);
-        this.m_cos = Math.cos(two_pi / steps);
-        this.m_StepsPerRad = steps / two_pi;
+        this.m_sin = Math.sin(TwoPI / steps);
+        this.m_cos = Math.cos(TwoPI / steps);
+        this.m_StepsPerRad = steps / TwoPI;
         if (delta < 0.0) {
             this.m_sin = -this.m_sin;
         }
