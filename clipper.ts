@@ -8,18 +8,18 @@ enum ClipType {
     ctUnion,
     ctDifference,
     ctXor
-};
+}
 
 enum PolyType {
     ptSubject,
     ptClip
-};
+}
   
 enum JoinType { 
     jtSquare, 
     jtRound, 
     jtMiter
-};
+}
 
 //By far the most widely used winding rules for polygon filling are
 //EvenOdd & NonZero (GDI, GDI+, XLib, OpenGL, Cairo, AGG, Quartz, SVG, Gr32)
@@ -30,7 +30,7 @@ enum PolyFillType {
     pftNonZero,
     pftPositive,
     pftNegative
-};
+}
 
 enum EndType { 
     etClosedPolygon, 
@@ -38,17 +38,23 @@ enum EndType {
     etOpenButt, 
     etOpenSquare, 
     etOpenRound 
-};
+}
 
 enum EdgeSide {
     esLeft,
     esRight
-};
+}
 
 enum Direction {
     dRightToLeft,
     dLeftToRight
-};
+}
+
+enum NodeType {
+    ntAny,
+    ntOpen,
+    ntClosed
+}
 
 class IntPoint {
     constructor(public x:Int64, public y:Int64) {
@@ -3936,65 +3942,59 @@ export class Clipper extends ClipperBase {
         return solution;
     }
 
-      public static Paths MinkowskiDiff(Path poly1, Path poly2)
-      {
-        Paths paths = Minkowski(poly1, poly2, false, true);
-        Clipper c = new Clipper();
+    public static MinkowskiDiff(poly1:Path, poly2:Path):Paths {
+        let paths = Clipper.Minkowski(poly1, poly2, false, true);
+        let c = new Clipper();
         c.AddPaths(paths, PolyType.ptSubject, true);
-        c.Execute(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+        c.ExecutePaths(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
         return paths;
-      }
-      
+    }
 
-      internal enum NodeType { ntAny, ntOpen, ntClosed };
-
-      public static Paths PolyTreeToPaths(PolyTree polytree)
-      {
-
-        Paths result = new Paths();
-        result.Capacity = polytree.Total;
-        AddPolyNodeToPaths(polytree, NodeType.ntAny, result);
+    public static PolyTreeToPaths(polytree:PolyTree):Paths {
+        let result = new Array<Path>();
+        //result.Capacity = polytree.Total;
+        Clipper.AddPolyNodeToPaths(polytree, NodeType.ntAny, result);
         return result;
-      }
-      
+    }
 
-      internal static void AddPolyNodeToPaths(PolyNode polynode, NodeType nt, Paths paths)
-      {
-        bool match = true;
-        switch (nt)
-        {
-          case NodeType.ntOpen: return;
-          case NodeType.ntClosed: match = !polynode.IsOpen; break;
-          default: break;
+    static AddPolyNodeToPaths(polynode:PolyNode, nt:NodeType, paths:Paths):void {
+        let match = true;
+        switch (nt) {
+          case NodeType.ntOpen:
+            return;
+          case NodeType.ntClosed:
+            match = !polynode.isOpen;
+            break;
+          default:
+            break;
         }
 
-        if (polynode.m_polygon.Count > 0 && match)
-          paths.Add(polynode.m_polygon);
-        foreach (PolyNode pn in polynode.Childs)
-          AddPolyNodeToPaths(pn, nt, paths);
-      }
+        if (polynode.polygon.length > 0 && match) {
+            paths.push(polynode.polygon);
+        }
+        for (let pn of polynode.children) {
+            Clipper.AddPolyNodeToPaths(pn, nt, paths);
+        }
+    }
       
 
-      public static Paths OpenPathsFromPolyTree(PolyTree polytree)
-      {
-        Paths result = new Paths();
-        result.Capacity = polytree.ChildCount;
-        for (int i = 0; i < polytree.ChildCount; i++)
-          if (polytree.Childs[i].IsOpen)
-            result.Add(polytree.Childs[i].m_polygon);
+    public static OpenPathsFromPolyTree(polytree:PolyTree):Paths {
+        let result = new Array<Path>();
+        //result.Capacity = polytree.ChildCount;
+        for (let pn of polytree.children) {
+            if (pn.isOpen) {
+                result.push(pn.polygon);
+            }
+        }
         return result;
-      }
-      
+    }
 
-      public static Paths ClosedPathsFromPolyTree(PolyTree polytree)
-      {
-        Paths result = new Paths();
-        result.Capacity = polytree.Total;
-        AddPolyNodeToPaths(polytree, NodeType.ntClosed, result);
+    public static ClosedPathsFromPolyTree(polytree:PolyTree):Paths {
+        let result = new Array<Path>();
+        //result.Capacity = polytree.Total;
+        Clipper.AddPolyNodeToPaths(polytree, NodeType.ntClosed, result);
         return result;
-      }
-      
-
+    }
 } //end Clipper
 
 export class ClipperOffset {
