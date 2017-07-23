@@ -294,6 +294,14 @@ export class Int64 {
         other.high = tmp.high;
     }
 
+    public static max(a:Int64, b:Int64):Int64 {
+        return a.greaterThan(b) ? a : b;
+    }
+
+    public static min(a:Int64, b:Int64):Int64 {
+        return a.lessThan(b) ? a : b;
+    }
+
     public static init():Promise<void> {
         return LongIntImpl.init();
     }
@@ -604,6 +612,14 @@ export class Int128 {
         other.d1 = tmp.d1;
         other.d2 = tmp.d2;
         other.d3 = tmp.d3;
+    }
+
+    public static max(a:Int128, b:Int128):Int128 {
+        return a.greaterThan(b) ? a : b;
+    }
+
+    public static min(a:Int128, b:Int128):Int128 {
+        return a.lessThan(b) ? a : b;
     }
 }
 

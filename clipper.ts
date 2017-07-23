@@ -765,6 +765,248 @@ function IntersectNodeSort(node1:IntersectNode, node2:IntersectNode):number {
     return node2.Pt.y.sub(node1.Pt.y).toInt(); 
 }
 
+function ReversePaths(polys:Paths):void {
+    for (let poly of polys) { 
+        poly.reverse();
+    }
+}
+
+function AreaPoly(poly:Path):number {
+    let cnt = poly.length;
+    if (cnt < 3) {
+        return 0;
+    }
+    let a = Int64.fromInt(0);
+    for (let i = 0, j = cnt - 1; i < cnt; ++i) {
+        a = a.add(poly[j].x.add(poly[i].x).mul(poly[j].y.sub(poly[i].y)));
+        j = i;
+    }
+    return -a.toNumber() * 0.5;
+}
+
+function AreaOutRec(outRec:OutRec):number {
+    return AreaPoly(outRec.Pts);
+}
+
+function AreaOutPt(op:OutPt):number {
+    let opFirst = op;
+    if (op == null) {
+        return 0;
+    }
+    let a = Int64.fromInt(0);
+    do {
+        a = a.add(op.Prev.Pt.x.add(op.Pt.x).mul(op.Prev.Pt.y.sub(op.Pt.y)));
+        op = op.Next;
+    } while (op != opFirst);
+    return a.toNumber() * 0.5;
+}
+
+function Area(shape:OutPt|OutRec|Path):number {
+    if (typeof shape == OutPt) {
+        return AreaOutPt(shape);
+    }
+    if (typeof shape == OutRec) {
+        return AreaOutRec(shape);
+    }
+    return AreaPoly(shape);
+}
+
+function Orientation(poly:Path):boolean
+{
+    return Area(poly) >= 0;
+}
+
+function PointCount(pts:OutPt):number {
+    if (pts == null) {
+        return 0;
+    }
+    let result = 0;
+    let p = pts;
+    do {
+        result++;
+        p = p.Next;
+    } while (p != pts);
+    return result;
+}
+
+function DupOutPt(outPt:OutPt, InsertAfter:boolean):OutPt {
+    let result = new OutPt();
+    result.Pt = outPt.Pt;
+    result.Idx = outPt.Idx;
+    if (InsertAfter) {
+        result.Next = outPt.Next;
+        result.Prev = outPt;
+        outPt.Next.Prev = result;
+        outPt.Next = result;
+    } else {
+        result.Prev = outPt.Prev;
+        result.Next = outPt;
+        outPt.Prev.Next = result;
+        outPt.Prev = result;
+    }
+    return result;
+}
+
+function GetOverlap(a1:Int64, a2:Int64, b1:Int64, b2:Int64):{r:boolean, Left:Int64, Right:Int64} {
+    let Left:Int64;
+    let Right:Int64;
+
+    if (a1.lessThan(a2)) {
+        if (b1.lessThan(b2)) {
+            Left = Int64.max(a1, b1);
+            Right = Int64.min(a2, b2);
+        } else {
+            Left = Int64.max(a1, b2);
+            Right = Int64.min(a2, b1);
+        }
+    } else{
+        if (b1.lessThan(b2)) {
+            Left = Int64.max(a2,b1);
+            Right = Int64.min(a1,b2);
+        } else { 
+            Left = Int64.max(a2, b2);
+            Right = Int64.min(a1, b1);
+        }
+    }
+    return {
+        r:Left.lessThan(Right),
+        Left:Left,
+        Right:Right};
+}
+
+function PointInPolygonPath(pt:IntPoint, path:Path):number {
+    //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+    //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
+    //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
+    let result = 0;
+    let cnt = path.length;
+    if (cnt < 3) {
+        return 0;
+    }
+    let ip = path[0];
+    for (let i = 1; i <= cnt; ++i) {
+        let ipNext = (i == cnt ? path[0] : path[i]);
+        if (ipNext.y.equals(pt.Y)) {
+            if (ipNext.x.equals(pt.x)
+                || (ip.y.equals(pt.y) 
+                    && (ipNext.x.greaterThan(pt.x) == ip.x.lessThan(pt.x)))) {
+                return -1;
+            }
+        }
+        
+        if (ip.y.lessThan(pt.y) != ipNext.y.lessThan(pt.y)) {
+            if (ip.x.greaterThanOrEqual(pt.x)) {
+                if (ipNext.x.greaterThan(pt.x)) {
+                    result = 1 - result;
+                } else {
+                    let d = ip.x.sub(pt.x).mul(ipNext.y.sub(pt.y)).toNumber() -
+                        ipNext.x.sub(pt.x).mul(ip.y.sub(pt.y)).toNumber();
+                    if (d == 0) {
+                        return -1;
+                    } 
+                    if (d > 0 == ipNext.y.greaterThan(ip.y)) {
+                        result = 1 - result;
+                    }
+                }
+            } else {
+                if (ipNext.x.greaterThan(pt.x)) {
+                    let d = ip.x.sub(pt.x).mul(ipNext.y.sub(pt.y)).toNumber() -
+                        ipNext.x.sub(pt.x).mul(ip.y.sub(pt.y)).toNumber();
+                    if (d == 0) {
+                        return -1;
+                    }
+                    if (d > 0 == ipNext.y.greaterThan(ip.y)) {
+                        result = 1 - result;
+                    }
+                }
+            }
+        }
+        ip = ipNext;
+    }
+    return result;
+}
+
+//See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
+//http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
+function PointInPolygonOutPt(pt:IntPoint, op:OutPt):number {
+    //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+    let result = 0;
+    let startOp = op;
+    let ptx = pt.x;
+    let pty = pt.y;
+    let poly0x = op.Pt.x;
+    let poly0y = op.Pt.y;
+    do {
+        op = op.Next;
+        let poly1x = op.Pt.x;
+        let poly1y = op.Pt.y;
+
+        if (poly1y.equals(pty)) {
+            if (poly1x.equals(ptx)
+                || (poly0y.equals(pty) && (poly1x.greaterThan(ptx) == poly0x.lessThan(ptx)))) {
+                return -1;
+            }
+        }
+        if (poly0y.lessThan(pty) != poly1y.lessThan(pty)) {
+            if (poly0x.greaterThanOrEqual(ptx)) {
+                if (poly1x.greaterThan(ptx)) {
+                    result = 1 - result;
+                } else {
+                    let d = poly0x.sub(ptx).mul(poly1y.sub(pty)).toNumber() -
+                        poly1x.sub(ptx).mul(poly0y.sub(pty)).toNumber();
+                    if (d == 0) {
+                        return -1;
+                    }
+                    if (d > 0 == poly1y.greaterThan(poly0y)) {
+                        result = 1 - result;
+                    }
+                }
+            } else {
+                if (poly1x.greaterThan(ptx)) {
+                    let d = poly0x.sub(ptx).mul(poly1y.sub(pty)).toNumber() -
+                        poly1x.sub(ptx).mul(poly0y.sub(pty)).toNumber();
+                    if (d == 0) {
+                        return -1;
+                    }
+                    if (d > 0 == poly1y.greaterThan(poly0y)) {
+                        result = 1 - result;
+                    }
+                }
+            }
+        }
+        poly0x = poly1x;
+        poly0y = poly1y;
+    } while (startOp != op);
+    return result;
+}
+
+function PointInPolygon(pt:IntPoint, shape:OutPt|Path):number {
+    if (typeof shape == OutPt) {
+        return PointInPolygonOutPt(pt, shape);
+    }
+    return PointInPolygonPath(pt, shape);
+}
+
+function Poly2ContainsPoly1(outPt1:OutPt, outPt2:OutPt):boolean {
+    let op = outPt1;
+    do {
+        //nb: PointInPolygon returns 0 if false, +1 if true, -1 if pt on polygon
+        let res = PointInPolygon(op.Pt, outPt2);
+        if (res >= 0) {
+            return res > 0;
+        }
+        op = op.Next;
+    } while (op != outPt1);
+    return true;
+}
+
+function ParseFirstLeft(FirstLeft:OutRec):OutRec {
+    while (FirstLeft != null && FirstLeft.Pts == null) {
+        FirstLeft = FirstLeft.FirstLeft;
+    }
+    return FirstLeft;
+}
+
 class ClipperBase {
     m_MinimaList:LocalMinima;
     m_CurrentLM:LocalMinima;
@@ -1497,18 +1739,18 @@ export class Clipper extends ClipperBase {
             }
 
             //fix orientations ...
-            for (outRec of this.m_PolyOuts) {
+            for (let outRec of this.m_PolyOuts) {
                 if (outRec.Pts == null || outRec.IsOpen) {
                     continue;
                 }
-                if ((outRec.IsHole ^ ReverseSolution) == (this.Area(outRec) > 0)) {
+                if ((outRec.IsHole ^ ReverseSolution) == (Area(outRec) > 0)) {
                     this.ReversePolyPtLinks(outRec.Pts);
                 }
             }
 
             this.JoinCommonEdges();
 
-            for (outRec of this.m_PolyOuts) {
+            for (let outRec of this.m_PolyOuts) {
                 if (outRec.Pts == null) {
                     continue;
                 } else if (outRec.IsOpen) {
@@ -2775,7 +3017,7 @@ export class Clipper extends ClipperBase {
                 }
                 //When StrictlySimple and 'e' is being touched by another edge, then
                 //make sure both edges have a vertex here ...
-                if (StrictlySimple) {
+                if (this.StrictlySimple) {
                     let ePrev = e.PrevInAEL;
                     if (e.OutIdx >= 0
                         && e.WindDelta != 0
@@ -2839,338 +3081,260 @@ export class Clipper extends ClipperBase {
         }
     }
 
-    private void DoMaxima(TEdge e)
-      {
-        TEdge eMaxPair = GetMaximaPairEx(e);
-        if (eMaxPair == null)
-        {
-          if (e.OutIdx >= 0)
-            AddOutPt(e, e.Top);
-          DeleteFromAEL(e);
-          return;
+    private DoMaxima(e:TEdge):void {
+        let eMaxPair = GetMaximaPairEx(e);
+        if (eMaxPair == null) {
+            if (e.OutIdx >= 0) {
+                this.AddOutPt(e, e.Top);
+            }
+            this.DeleteFromAEL(e);
+            return;
         }
 
-        TEdge eNext = e.NextInAEL;
-        while(eNext != null && eNext != eMaxPair)
-        {
-          IntersectEdges(e, eNext, e.Top);
-          SwapPositionsInAEL(e, eNext);
-          eNext = e.NextInAEL;
+        let eNext = e.NextInAEL;
+        while (eNext != null && eNext != eMaxPair) {
+            this.IntersectEdges(e, eNext, e.Top);
+            this.SwapPositionsInAEL(e, eNext);
+            eNext = e.NextInAEL;
         }
 
-        if(e.OutIdx == Unassigned && eMaxPair.OutIdx == Unassigned)
-        {
-          DeleteFromAEL(e);
-          DeleteFromAEL(eMaxPair);
+        if (e.OutIdx == Unassigned && eMaxPair.OutIdx == Unassigned) {
+            this.DeleteFromAEL(e);
+            this.DeleteFromAEL(eMaxPair);
+        } else if( e.OutIdx >= 0 && eMaxPair.OutIdx >= 0 ) {
+            if (e.OutIdx >= 0) {
+                this.AddLocalMaxPoly(e, eMaxPair, e.Top);
+            }
+            this.DeleteFromAEL(e);
+            this.DeleteFromAEL(eMaxPair);
+        } else if (e.WindDelta == 0) {
+            if (e.OutIdx >= 0) {
+                this.AddOutPt(e, e.Top);
+                e.OutIdx = Unassigned;
+            }
+            this.DeleteFromAEL(e);
+
+            if (eMaxPair.OutIdx >= 0) {
+                this.AddOutPt(eMaxPair, e.Top);
+                eMaxPair.OutIdx = Unassigned;
+            }
+            this.DeleteFromAEL(eMaxPair);
+        } else {
+            throw new Error("DoMaxima error");
         }
-        else if( e.OutIdx >= 0 && eMaxPair.OutIdx >= 0 )
-        {
-          if (e.OutIdx >= 0) AddLocalMaxPoly(e, eMaxPair, e.Top);
-          DeleteFromAEL(e);
-          DeleteFromAEL(eMaxPair);
+    }
+
+    private BuildResult(polyg:Paths):void {
+        polyg.length = 0;
+        //polyg.length = this.m_PolyOuts.length;
+        for (let outRec of this.m_PolyOuts) {
+            if (outRec.Pts == null) {
+                continue;
+            }
+            let p = outRec.Pts.Prev;
+            let cnt = PointCount(p);
+            if (cnt < 2) {
+                continue;
+            }
+            let pg = new Array<IntPoint>();
+            for (let j = 0; j < cnt; j++) {
+                pg.push(p.Pt);
+                p = p.Prev;
+            }
+            polyg.push(pg);
         }
-        else if (e.WindDelta == 0)
-        {
-          if (e.OutIdx >= 0) 
-          {
-            AddOutPt(e, e.Top);
-            e.OutIdx = Unassigned;
-          }
-          DeleteFromAEL(e);
+    }
 
-          if (eMaxPair.OutIdx >= 0)
-          {
-            AddOutPt(eMaxPair, e.Top);
-            eMaxPair.OutIdx = Unassigned;
-          }
-          DeleteFromAEL(eMaxPair);
-        } 
-        else throw new ClipperException("DoMaxima error");
-      }
-      
+    private BuildResult2(polytree:PolyTree):void {
+        polytree.clear();
 
-      public static void ReversePaths(Paths polys)
-      {
-        foreach (var poly in polys) { poly.Reverse(); }
-      }
-      
+        //add each output polygon/contour to polytree ...
+        //polytree.m_AllPolys.length = this.m_PolyOuts.length;
+        for (let outRec of m_PolyOuts) {
+            let cnt = PointCount(outRec.Pts);
+            if ((outRec.IsOpen && cnt < 2) 
+                || (!outRec.IsOpen && cnt < 3)) {
+                continue;
+            }
+            this.FixHoleLinkage(outRec);
+            let pn = new PolyNode();
+            polytree.m_AllPolys.push(pn);
+            outRec.PolyNode = pn;
+            //pn.m_polygon.length = cnt;
+            let op = outRec.Pts.Prev;
+            for (let j = 0; j < cnt; j++) {
+                pn.m_polygon.push(op.Pt);
+                op = op.Prev;
+            }
+        }
 
-      public static bool Orientation(Path poly)
-      {
-          return Area(poly) >= 0;
-      }
-      
-
-      private int PointCount(OutPt pts)
-      {
-          if (pts == null) return 0;
-          int result = 0;
-          OutPt p = pts;
-          do
-          {
-              result++;
-              p = p.Next;
-          }
-          while (p != pts);
-          return result;
-      }
-      
-
-      private void BuildResult(Paths polyg)
-      {
-          polyg.Clear();
-          polyg.Capacity = m_PolyOuts.Count;
-          for (int i = 0; i < m_PolyOuts.Count; i++)
-          {
-              OutRec outRec = m_PolyOuts[i];
-              if (outRec.Pts == null) continue;
-              OutPt p = outRec.Pts.Prev;
-              int cnt = PointCount(p);
-              if (cnt < 2) continue;
-              Path pg = new Path(cnt);
-              for (int j = 0; j < cnt; j++)
-              {
-                  pg.Add(p.Pt);
-                  p = p.Prev;
-              }
-              polyg.Add(pg);
-          }
-      }
-      
-
-      private void BuildResult2(PolyTree polytree)
-      {
-          polytree.Clear();
-
-          //add each output polygon/contour to polytree ...
-          polytree.m_AllPolys.Capacity = m_PolyOuts.Count;
-          for (int i = 0; i < m_PolyOuts.Count; i++)
-          {
-              OutRec outRec = m_PolyOuts[i];
-              int cnt = PointCount(outRec.Pts);
-              if ((outRec.IsOpen && cnt < 2) || 
-                (!outRec.IsOpen && cnt < 3)) continue;
-              FixHoleLinkage(outRec);
-              PolyNode pn = new PolyNode();
-              polytree.m_AllPolys.Add(pn);
-              outRec.PolyNode = pn;
-              pn.m_polygon.Capacity = cnt;
-              OutPt op = outRec.Pts.Prev;
-              for (int j = 0; j < cnt; j++)
-              {
-                  pn.m_polygon.Add(op.Pt);
-                  op = op.Prev;
-              }
-          }
-
-          //fixup PolyNode links etc ...
-          polytree.m_Childs.Capacity = m_PolyOuts.Count;
-          for (int i = 0; i < m_PolyOuts.Count; i++)
-          {
-              OutRec outRec = m_PolyOuts[i];
-              if (outRec.PolyNode == null) continue;
-              else if (outRec.IsOpen)
-              {
+        //fixup PolyNode links etc ...
+        //polytree.m_Childs.length = m_PolyOuts.length;
+        for (let outRec of this.m_PolyOuts) {
+            if (outRec.PolyNode == null) {
+                continue;
+            } else if (outRec.IsOpen) {
                 outRec.PolyNode.IsOpen = true;
-                polytree.AddChild(outRec.PolyNode);
-              }
-              else if (outRec.FirstLeft != null && 
-                outRec.FirstLeft.PolyNode != null)
-                  outRec.FirstLeft.PolyNode.AddChild(outRec.PolyNode);
-              else
-                polytree.AddChild(outRec.PolyNode);
-          }
-      }
-      
+                polytree.addChild(outRec.PolyNode);
+            } else if (outRec.FirstLeft != null
+                && outRec.FirstLeft.PolyNode != null) {
+                outRec.FirstLeft.PolyNode.addChild(outRec.PolyNode);
+            } else {
+                polytree.addChild(outRec.PolyNode);
+            }
+        }
+    }
 
-      private void FixupOutPolyline(OutRec outrec)
-      {
-        OutPt pp = outrec.Pts;
-        OutPt lastPP = pp.Prev;
-        while (pp != lastPP)
-        {
+    private FixupOutPolyline(outrec:OutRec):void {
+        let pp = outrec.Pts;
+        let lastPP = pp.Prev;
+        while (pp != lastPP) {
             pp = pp.Next;
-            if (pp.Pt == pp.Prev.Pt)
-            {
-                if (pp == lastPP) lastPP = pp.Prev;
-                OutPt tmpPP = pp.Prev;
+            if (pp.Pt == pp.Prev.Pt) {
+                if (pp == lastPP) {
+                    lastPP = pp.Prev;
+                }
+                let tmpPP = pp.Prev;
                 tmpPP.Next = pp.Next;
                 pp.Next.Prev = tmpPP;
                 pp = tmpPP;
             }
         }
-        if (pp == pp.Prev) outrec.Pts = null;
-      }
-      
-
-      private void FixupOutPolygon(OutRec outRec)
-      {
-          //FixupOutPolygon() - removes duplicate points and simplifies consecutive
-          //parallel edges by removing the middle vertex.
-          OutPt lastOK = null;
-          outRec.BottomPt = null;
-          OutPt pp = outRec.Pts;
-          bool preserveCol = PreserveCollinear || StrictlySimple;
-          for (;;)
-          {
-              if (pp.Prev == pp || pp.Prev == pp.Next)
-              {
-                  outRec.Pts = null;
-                  return;
-              }
-              //test for duplicate points and collinear edges ...
-              if ((pp.Pt == pp.Next.Pt) || (pp.Pt == pp.Prev.Pt) ||
-                (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt, m_UseFullRange) &&
-                (!preserveCol || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
-              {
-                  lastOK = null;
-                  pp.Prev.Next = pp.Next;
-                  pp.Next.Prev = pp.Prev;
-                  pp = pp.Prev;
-              }
-              else if (pp == lastOK) break;
-              else
-              {
-                  if (lastOK == null) lastOK = pp;
-                  pp = pp.Next;
-              }
-          }
-          outRec.Pts = pp;
-      }
-      
-
-      OutPt DupOutPt(OutPt outPt, bool InsertAfter)
-      {
-        OutPt result = new OutPt();
-        result.Pt = outPt.Pt;
-        result.Idx = outPt.Idx;
-        if (InsertAfter)
-        {
-          result.Next = outPt.Next;
-          result.Prev = outPt;
-          outPt.Next.Prev = result;
-          outPt.Next = result;
-        } 
-        else
-        {
-          result.Prev = outPt.Prev;
-          result.Next = outPt;
-          outPt.Prev.Next = result;
-          outPt.Prev = result;
+        if (pp == pp.Prev) {
+            outrec.Pts = null;
         }
-        return result;
-      }
-      
+    }
 
-      bool GetOverlap(cInt a1, cInt a2, cInt b1, cInt b2, out cInt Left, out cInt Right)
-      {
-        if (a1 < a2)
-        {
-          if (b1 < b2) {Left = Math.Max(a1,b1); Right = Math.Min(a2,b2);}
-          else {Left = Math.Max(a1,b2); Right = Math.Min(a2,b1);}
-        } 
-        else
-        {
-          if (b1 < b2) {Left = Math.Max(a2,b1); Right = Math.Min(a1,b2);}
-          else { Left = Math.Max(a2, b2); Right = Math.Min(a1, b1); }
+    private FixupOutPolygon(outRec:OutRec):void {
+        //FixupOutPolygon() - removes duplicate points and simplifies consecutive
+        //parallel edges by removing the middle vertex.
+        let lastOK:OutPt = null;
+        outRec.BottomPt = null;
+        let pp = outRec.Pts;
+        let preserveCol = this.PreserveCollinear || this.StrictlySimple;
+        for (;;) {
+            if (pp.Prev == pp || pp.Prev == pp.Next) {
+                outRec.Pts = null;
+                return;
+            }
+            //test for duplicate points and collinear edges ...
+            if (pp.Pt == pp.Next.Pt
+                || pp.Pt == pp.Prev.Pt
+                || (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt, this.m_UseFullRange)
+                    && (!preserveCol || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt)))) {
+                lastOK = null;
+                pp.Prev.Next = pp.Next;
+                pp.Next.Prev = pp.Prev;
+                pp = pp.Prev;
+            } else if (pp == lastOK) {
+                break;
+            } else {
+                if (lastOK == null) {
+                    lastOK = pp;
+                }
+                pp = pp.Next;
+            }
         }
-        return Left < Right;
-      }
-      
+        outRec.Pts = pp;
+    }
 
-      bool JoinHorz(OutPt op1, OutPt op1b, OutPt op2, OutPt op2b, 
-        IntPoint Pt, bool DiscardLeft)
-      {
-        Direction Dir1 = (op1.Pt.X > op1b.Pt.X ? 
-          Direction.dRightToLeft : Direction.dLeftToRight);
-        Direction Dir2 = (op2.Pt.X > op2b.Pt.X ?
-          Direction.dRightToLeft : Direction.dLeftToRight);
-        if (Dir1 == Dir2) return false;
+    JoinHorz(op1:OutPt, op1b:OutPt, op2:OutPt, op2b:OutPt, Pt:IntPoint, DiscardLeft:boolean):boolean {
+        let Dir1 = op1.Pt.x.greaterThan(op1b.Pt.x) ? 
+          Direction.dRightToLeft : Direction.dLeftToRight;
+        let Dir2 = op2.Pt.x.greaterThan(op2b.Pt.x) ?
+          Direction.dRightToLeft : Direction.dLeftToRight;
+        if (Dir1 == Dir2) {
+            return false;
+        }
 
         //When DiscardLeft, we want Op1b to be on the Left of Op1, otherwise we
         //want Op1b to be on the Right. (And likewise with Op2 and Op2b.)
         //So, to facilitate this while inserting Op1b and Op2b ...
         //when DiscardLeft, make sure we're AT or RIGHT of Pt before adding Op1b,
         //otherwise make sure we're AT or LEFT of Pt. (Likewise with Op2b.)
-        if (Dir1 == Direction.dLeftToRight) 
-        {
-          while (op1.Next.Pt.X <= Pt.X && 
-            op1.Next.Pt.X >= op1.Pt.X && op1.Next.Pt.Y == Pt.Y)  
-              op1 = op1.Next;
-          if (DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
-          op1b = DupOutPt(op1, !DiscardLeft);
-          if (op1b.Pt != Pt) 
-          {
-            op1 = op1b;
-            op1.Pt = Pt;
+        if (Dir1 == Direction.dLeftToRight) {
+            while (op1.Next.Pt.x.lessThanOrEqual(Pt.x)
+                && op1.Next.Pt.x.greaterThanOrEqual(op1.Pt.x)
+                && op1.Next.Pt.y.equals(Pt.y)) {
+                op1 = op1.Next;
+            }
+            if (DiscardLeft && op1.Pt.x.notEquals(Pt.x)) {
+                op1 = op1.Next;
+            }
             op1b = DupOutPt(op1, !DiscardLeft);
-          }
-        } 
-        else
-        {
-          while (op1.Next.Pt.X >= Pt.X && 
-            op1.Next.Pt.X <= op1.Pt.X && op1.Next.Pt.Y == Pt.Y) 
-              op1 = op1.Next;
-          if (!DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
-          op1b = DupOutPt(op1, DiscardLeft);
-          if (op1b.Pt != Pt)
-          {
-            op1 = op1b;
-            op1.Pt = Pt;
+            if (op1b.Pt.notEquals(Pt)) {
+                op1 = op1b;
+                op1.Pt = Pt;
+                op1b = DupOutPt(op1, !DiscardLeft);
+            }
+        } else {
+            while (op1.Next.Pt.x.greaterThanOrEqual(Pt.x)
+                && op1.Next.Pt.x.lessThanOrEqual(op1.Pt.x)
+                && op1.Next.Pt.y.equals(Pt.y)) {
+                op1 = op1.Next;
+            }
+            if (!DiscardLeft && op1.Pt.x.notEquals(Pt.x)) {
+                op1 = op1.Next;
+            }
             op1b = DupOutPt(op1, DiscardLeft);
-          }
+            if (op1b.Pt.notEquals(Pt)) {
+                op1 = op1b;
+                op1.Pt = Pt;
+                op1b = DupOutPt(op1, DiscardLeft);
+            }
         }
 
-        if (Dir2 == Direction.dLeftToRight)
-        {
-          while (op2.Next.Pt.X <= Pt.X && 
-            op2.Next.Pt.X >= op2.Pt.X && op2.Next.Pt.Y == Pt.Y)
-              op2 = op2.Next;
-          if (DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
-          op2b = DupOutPt(op2, !DiscardLeft);
-          if (op2b.Pt != Pt)
-          {
-            op2 = op2b;
-            op2.Pt = Pt;
+        if (Dir2 == Direction.dLeftToRight) {
+            while (op2.Next.Pt.x.lessThanOrEqual(Pt.x)
+                && op2.Next.Pt.x.greaterThanOrEqual(op2.Pt.x)
+                && op2.Next.Pt.y.equals(Pt.y)) {
+                op2 = op2.Next;
+            }
+            if (DiscardLeft && op2.Pt.x.notEquals(Pt.x)) {
+                op2 = op2.Next;
+            }
             op2b = DupOutPt(op2, !DiscardLeft);
-          };
-        } else
-        {
-          while (op2.Next.Pt.X >= Pt.X && 
-            op2.Next.Pt.X <= op2.Pt.X && op2.Next.Pt.Y == Pt.Y) 
-              op2 = op2.Next;
-          if (!DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
-          op2b = DupOutPt(op2, DiscardLeft);
-          if (op2b.Pt != Pt)
-          {
-            op2 = op2b;
-            op2.Pt = Pt;
+            if (op2b.Pt.notEquals(Pt)) {
+                op2 = op2b;
+                op2.Pt = Pt;
+                op2b = DupOutPt(op2, !DiscardLeft);
+            }
+        } else {
+            while (op2.Next.Pt.x.greaterThanOrEqual(Pt.x)
+                && op2.Next.Pt.x.lessThanOrEqual(op2.Pt.x)
+                && op2.Next.Pt.y.equals(Pt.y)) {
+                op2 = op2.Next;
+            }
+            if (!DiscardLeft && op2.Pt.x.notEquals(Pt.x)) {
+                op2 = op2.Next;
+            }
             op2b = DupOutPt(op2, DiscardLeft);
-          };
-        };
-
-        if ((Dir1 == Direction.dLeftToRight) == DiscardLeft)
-        {
-          op1.Prev = op2;
-          op2.Next = op1;
-          op1b.Next = op2b;
-          op2b.Prev = op1b;
+            if (op2b.Pt.notEquals(Pt)) {
+                op2 = op2b;
+                op2.Pt = Pt;
+                op2b = DupOutPt(op2, DiscardLeft);
+            }
         }
-        else
-        {
-          op1.Next = op2;
-          op2.Prev = op1;
-          op1b.Prev = op2b;
-          op2b.Next = op1b;
+
+        if ((Dir1 == Direction.dLeftToRight) == DiscardLeft) {
+            op1.Prev = op2;
+            op2.Next = op1;
+            op1b.Next = op2b;
+            op2b.Prev = op1b;
+        } else {
+            op1.Next = op2;
+            op2.Prev = op1;
+            op1b.Prev = op2b;
+            op2b.Next = op1b;
         }
         return true;
-      }
-      
+    }
 
-      private bool JoinPoints(Join j, OutRec outRec1, OutRec outRec2)
-      {
-        OutPt op1 = j.OutPt1, op1b;
-        OutPt op2 = j.OutPt2, op2b;
+    private JoinPoints(j:Join, outRec1:OutRec, outRec2:OutRec):boolean {
+        let op1 = j.OutPt1;
+        let op1b:OutPt;
+        let op2 = j.OutPt2;
+        let op2b:OutPt;
 
         //There are 3 kinds of joins for output polygons ...
         //1. Horizontal joins where Join.OutPt1 & Join.OutPt2 are vertices anywhere
@@ -3179,320 +3343,228 @@ export class Clipper extends ClipperBase {
         //location at the Bottom of the overlapping segment (& Join.OffPt is above).
         //3. StrictlySimple joins where edges touch but are not collinear and where
         //Join.OutPt1, Join.OutPt2 & Join.OffPt all share the same point.
-        bool isHorizontal = (j.OutPt1.Pt.Y == j.OffPt.Y);
+        let isHorizontal = j.OutPt1.Pt.y.equals(j.OffPt.y);
 
-        if (isHorizontal && (j.OffPt == j.OutPt1.Pt) && (j.OffPt == j.OutPt2.Pt))
-        {          
-          //Strictly Simple join ...
-          if (outRec1 != outRec2) return false;
-          op1b = j.OutPt1.Next;
-          while (op1b != op1 && (op1b.Pt == j.OffPt)) 
-            op1b = op1b.Next;
-          bool reverse1 = (op1b.Pt.Y > j.OffPt.Y);
-          op2b = j.OutPt2.Next;
-          while (op2b != op2 && (op2b.Pt == j.OffPt)) 
-            op2b = op2b.Next;
-          bool reverse2 = (op2b.Pt.Y > j.OffPt.Y);
-          if (reverse1 == reverse2) return false;
-          if (reverse1)
-          {
-            op1b = DupOutPt(op1, false);
-            op2b = DupOutPt(op2, true);
-            op1.Prev = op2;
-            op2.Next = op1;
-            op1b.Next = op2b;
-            op2b.Prev = op1b;
-            j.OutPt1 = op1;
-            j.OutPt2 = op1b;
-            return true;
-          } else
-          {
-            op1b = DupOutPt(op1, true);
-            op2b = DupOutPt(op2, false);
-            op1.Next = op2;
-            op2.Prev = op1;
-            op1b.Prev = op2b;
-            op2b.Next = op1b;
-            j.OutPt1 = op1;
-            j.OutPt2 = op1b;
-            return true;
-          }
-        } 
-        else if (isHorizontal)
-        {
-          //treat horizontal joins differently to non-horizontal joins since with
-          //them we're not yet sure where the overlapping is. OutPt1.Pt & OutPt2.Pt
-          //may be anywhere along the horizontal edge.
-          op1b = op1;
-          while (op1.Prev.Pt.Y == op1.Pt.Y && op1.Prev != op1b && op1.Prev != op2)
-            op1 = op1.Prev;
-          while (op1b.Next.Pt.Y == op1b.Pt.Y && op1b.Next != op1 && op1b.Next != op2)
-            op1b = op1b.Next;
-          if (op1b.Next == op1 || op1b.Next == op2) return false; //a flat 'polygon'
-
-          op2b = op2;
-          while (op2.Prev.Pt.Y == op2.Pt.Y && op2.Prev != op2b && op2.Prev != op1b)
-            op2 = op2.Prev;
-          while (op2b.Next.Pt.Y == op2b.Pt.Y && op2b.Next != op2 && op2b.Next != op1)
-            op2b = op2b.Next;
-          if (op2b.Next == op2 || op2b.Next == op1) return false; //a flat 'polygon'
-
-          cInt Left, Right;
-          //Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
-          if (!GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X, out Left, out Right))
-            return false;
-
-          //DiscardLeftSide: when overlapping edges are joined, a spike will created
-          //which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
-          //on the discard Side as either may still be needed for other joins ...
-          IntPoint Pt;
-          bool DiscardLeftSide;
-          if (op1.Pt.X >= Left && op1.Pt.X <= Right) 
-          {
-            Pt = op1.Pt; DiscardLeftSide = (op1.Pt.X > op1b.Pt.X);
-          } 
-          else if (op2.Pt.X >= Left&& op2.Pt.X <= Right) 
-          {
-            Pt = op2.Pt; DiscardLeftSide = (op2.Pt.X > op2b.Pt.X);
-          } 
-          else if (op1b.Pt.X >= Left && op1b.Pt.X <= Right)
-          {
-            Pt = op1b.Pt; DiscardLeftSide = op1b.Pt.X > op1.Pt.X;
-          } 
-          else
-          {
-            Pt = op2b.Pt; DiscardLeftSide = (op2b.Pt.X > op2.Pt.X);
-          }
-          j.OutPt1 = op1;
-          j.OutPt2 = op2;
-          return JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
-        } else
-        {
-          //nb: For non-horizontal joins ...
-          //    1. Jr.OutPt1.Pt.Y == Jr.OutPt2.Pt.Y
-          //    2. Jr.OutPt1.Pt > Jr.OffPt.Y
-
-          //make sure the polygons are correctly oriented ...
-          op1b = op1.Next;
-          while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Next;
-          bool Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) ||
-            !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange));
-          if (Reverse1)
-          {
-            op1b = op1.Prev;
-            while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Prev;
-            if ((op1b.Pt.Y > op1.Pt.Y) ||
-              !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange)) return false;
-          };
-          op2b = op2.Next;
-          while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Next;
-          bool Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) ||
-            !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange));
-          if (Reverse2)
-          {
-            op2b = op2.Prev;
-            while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Prev;
-            if ((op2b.Pt.Y > op2.Pt.Y) ||
-              !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange)) return false;
-          }
-
-          if ((op1b == op1) || (op2b == op2) || (op1b == op2b) ||
-            ((outRec1 == outRec2) && (Reverse1 == Reverse2))) return false;
-
-          if (Reverse1)
-          {
-            op1b = DupOutPt(op1, false);
-            op2b = DupOutPt(op2, true);
-            op1.Prev = op2;
-            op2.Next = op1;
-            op1b.Next = op2b;
-            op2b.Prev = op1b;
-            j.OutPt1 = op1;
-            j.OutPt2 = op1b;
-            return true;
-          } else
-          {
-            op1b = DupOutPt(op1, true);
-            op2b = DupOutPt(op2, false);
-            op1.Next = op2;
-            op2.Prev = op1;
-            op1b.Prev = op2b;
-            op2b.Next = op1b;
-            j.OutPt1 = op1;
-            j.OutPt2 = op1b;
-            return true;
-          }
-        }
-      }
-      //----------------------------------------------------------------------
-
-      public static int PointInPolygon(IntPoint pt, Path path)
-      {
-        //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-        //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-        //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-        int result = 0, cnt = path.Count;
-        if (cnt < 3) return 0;
-        IntPoint ip = path[0];
-        for (int i = 1; i <= cnt; ++i)
-        {
-          IntPoint ipNext = (i == cnt ? path[0] : path[i]);
-          if (ipNext.Y == pt.Y)
-          {
-            if ((ipNext.X == pt.X) || (ip.Y == pt.Y &&
-              ((ipNext.X > pt.X) == (ip.X < pt.X)))) return -1;
-          }
-          if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
-          {
-            if (ip.X >= pt.X)
-            {
-              if (ipNext.X > pt.X) result = 1 - result;
-              else
-              {
-                double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
-                  (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
-                if (d == 0) return -1;
-                else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
-              }
+        if (isHorizontal 
+            && j.OffPt.equals(j.OutPt1.Pt)
+            && j.OffPt.equals(j.OutPt2.Pt)) {          
+            //Strictly Simple join ...
+            if (outRec1 != outRec2) {
+                return false;
             }
-            else
-            {
-              if (ipNext.X > pt.X)
-              {
-                double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
-                  (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
-                if (d == 0) return -1;
-                else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
-              }
+            op1b = j.OutPt1.Next;
+            while (op1b != op1 && op1b.Pt.equals(j.OffPt)) {
+                op1b = op1b.Next;
             }
-          }
-          ip = ipNext;
-        }
-        return result;
-      }
-      
-
-      //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-      //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-      private static int PointInPolygon(IntPoint pt, OutPt op)
-      {
-        //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-        int result = 0;
-        OutPt startOp = op;
-        cInt ptx = pt.X, pty = pt.Y;
-        cInt poly0x = op.Pt.X, poly0y = op.Pt.Y;
-        do
-        {
-          op = op.Next;
-          cInt poly1x = op.Pt.X, poly1y = op.Pt.Y;
-
-          if (poly1y == pty)
-          {
-            if ((poly1x == ptx) || (poly0y == pty &&
-              ((poly1x > ptx) == (poly0x < ptx)))) return -1;
-          }
-          if ((poly0y < pty) != (poly1y < pty))
-          {
-            if (poly0x >= ptx)
-            {
-              if (poly1x > ptx) result = 1 - result;
-              else
-              {
-                double d = (double)(poly0x - ptx) * (poly1y - pty) -
-                  (double)(poly1x - ptx) * (poly0y - pty);
-                if (d == 0) return -1;
-                if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
-              }
+            let reverse1 = op1b.Pt.y.greaterThan(j.OffPt.y);
+            op2b = j.OutPt2.Next;
+            while (op2b != op2 && op2b.Pt.equals(j.OffPt)) {
+                op2b = op2b.Next;
             }
-            else
-            {
-              if (poly1x > ptx)
-              {
-                double d = (double)(poly0x - ptx) * (poly1y - pty) -
-                  (double)(poly1x - ptx) * (poly0y - pty);
-                if (d == 0) return -1;
-                if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
-              }
+            let reverse2 = op2b.Pt.y.greaterThan(j.OffPt.y);
+            if (reverse1 == reverse2) {
+                return false;
             }
-          }
-          poly0x = poly1x; poly0y = poly1y;
-        } while (startOp != op);
-        return result;
-      }
-      
+            if (reverse1) {
+                op1b = DupOutPt(op1, false);
+                op2b = DupOutPt(op2, true);
+                op1.Prev = op2;
+                op2.Next = op1;
+                op1b.Next = op2b;
+                op2b.Prev = op1b;
+                j.OutPt1 = op1;
+                j.OutPt2 = op1b;
+                return true;
+            } else {
+                op1b = DupOutPt(op1, true);
+                op2b = DupOutPt(op2, false);
+                op1.Next = op2;
+                op2.Prev = op1;
+                op1b.Prev = op2b;
+                op2b.Next = op1b;
+                j.OutPt1 = op1;
+                j.OutPt2 = op1b;
+                return true;
+            }
+        } else if (isHorizontal) {
+            //treat horizontal joins differently to non-horizontal joins since with
+            //them we're not yet sure where the overlapping is. OutPt1.Pt & OutPt2.Pt
+            //may be anywhere along the horizontal edge.
+            op1b = op1;
+            while (op1.Prev.Pt.y.equals(op1.Pt.y)
+                && op1.Prev != op1b
+                && op1.Prev != op2) {
+                op1 = op1.Prev;
+            }
+            while (op1b.Next.Pt.y.equals(op1b.Pt.y)
+                && op1b.Next != op1
+                && op1b.Next != op2) {
+                op1b = op1b.Next;
+            }
+            if (op1b.Next == op1 || op1b.Next == op2) {
+                return false; //a flat 'polygon'
+            }
 
-      private static bool Poly2ContainsPoly1(OutPt outPt1, OutPt outPt2)
-      {
-        OutPt op = outPt1;
-        do
-        {
-          //nb: PointInPolygon returns 0 if false, +1 if true, -1 if pt on polygon
-          int res = PointInPolygon(op.Pt, outPt2);
-          if (res >= 0) return res > 0;
-          op = op.Next;
+            op2b = op2;
+            while (op2.Prev.Pt.y.equals(op2.Pt.y)
+                && op2.Prev != op2b
+                && op2.Prev != op1b) {
+                op2 = op2.Prev;
+            }
+            while (op2b.Next.Pt.y.equals(op2b.Pt.y)
+                && op2b.Next != op2
+                && op2b.Next != op1) {
+                op2b = op2b.Next;
+            }
+            if (op2b.Next == op2 || op2b.Next == op1) {
+                return false; //a flat 'polygon'
+            }
+
+            let r = GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X);
+            //Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
+            if (!r.r) {
+                return false;
+            }
+            let Left = r.Left;
+            let Rigth = r.Right;
+
+            //DiscardLeftSide: when overlapping edges are joined, a spike will created
+            //which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
+            //on the discard Side as either may still be needed for other joins ...
+            let Pt:IntPoint;
+            let DiscardLeftSide:boolean;
+            if (op1.Pt.x.greaterThanOrEqual(Left)
+                && op1.Pt.x.lessThanOrEqual(Right)) {
+                Pt = op1.Pt;
+                DiscardLeftSide = op1.Pt.x.greaterThan(op1b.Pt.x);
+            } else if (op2.Pt.x.greaterThanOrEqual(Left)
+                && op2.Pt.x.lessThanOrEqual(Right)) {
+                Pt = op2.Pt;
+                DiscardLeftSide = op2.Pt.x.greaterThan(op2b.Pt.x);
+            } else if (op1b.Pt.x.greaterThanOrEqual(Left)
+                && op1b.Pt.x.lessThanOrEqual(Right)) {
+                Pt = op1b.Pt;
+                DiscardLeftSide = op1b.Pt.x.greaterThan(op1.Pt.x);
+            } else {
+                Pt = op2b.Pt;
+                DiscardLeftSide = op2b.Pt.x.greaterThan(op2.Pt.x);
+            }
+            j.OutPt1 = op1;
+            j.OutPt2 = op2;
+            return JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
+        } else {
+            //nb: For non-horizontal joins ...
+            //    1. Jr.OutPt1.Pt.Y == Jr.OutPt2.Pt.Y
+            //    2. Jr.OutPt1.Pt > Jr.OffPt.Y
+
+            //make sure the polygons are correctly oriented ...
+            op1b = op1.Next;
+            while (op1b.Pt.equals(op1.Pt) && op1b != op1) {
+                op1b = op1b.Next;
+            }
+            let Reverse1 = (op1b.Pt.y.greaterThan(op1.Pt.y) 
+                || !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange));
+            if (Reverse1) {
+                op1b = op1.Prev;
+                while (op1b.Pt.equals(op1.Pt) && op1b != op1) {
+                    op1b = op1b.Prev;
+                }
+                if (op1b.Pt.y.greaterThan(op1.Pt.y)
+                    || !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange)) {
+                    return false;
+                }
+            }
+            op2b = op2.Next;
+            while (op2b.Pt.equals(op2.Pt) && op2b != op2) {
+                op2b = op2b.Next;
+            }
+            let Reverse2 = (op2b.Pt.y.greaterThan(op2.Pt.y)
+                || !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange));
+            if (Reverse2) {
+                op2b = op2.Prev;
+                while (op2b.Pt.equals(op2.Pt) && op2b != op2) {
+                    op2b = op2b.Prev;
+                }
+                if (op2b.Pt.y.greaterThan(op2.Pt.y)
+                    || !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange)) {
+                    return false;
+                }
+            }
+
+            if (op1b == op1 || op2b == op2 || op1b == op2b ||
+                (outRec1 == outRec2 && Reverse1 == Reverse2)) {
+                return false;
+            }
+
+            if (Reverse1) {
+                op1b = DupOutPt(op1, false);
+                op2b = DupOutPt(op2, true);
+                op1.Prev = op2;
+                op2.Next = op1;
+                op1b.Next = op2b;
+                op2b.Prev = op1b;
+                j.OutPt1 = op1;
+                j.OutPt2 = op1b;
+                return true;
+            } else {
+                op1b = DupOutPt(op1, true);
+                op2b = DupOutPt(op2, false);
+                op1.Next = op2;
+                op2.Prev = op1;
+                op1b.Prev = op2b;
+                op2b.Next = op1b;
+                j.OutPt1 = op1;
+                j.OutPt2 = op1b;
+                return true;
+            }
         }
-        while (op != outPt1);
-        return true;
-      }
-      //----------------------------------------------------------------------
+    }
 
-      private void FixupFirstLefts1(OutRec OldOutRec, OutRec NewOutRec)
-      { 
-        foreach (OutRec outRec in m_PolyOuts)
-        {
-          OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-          if (outRec.Pts != null && firstLeft == OldOutRec)
-          {
-            if (Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts))
-                outRec.FirstLeft = NewOutRec;
-          }
+    private FixupFirstLefts1(OldOutRec:OutRec, NewOutRec:OutRec):void { 
+        for (let outRec of this.m_PolyOuts) {
+            let firstLeft = ParseFirstLeft(outRec.FirstLeft);
+            if (outRec.Pts != null && firstLeft == OldOutRec) {
+                if (Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts)) {
+                    outRec.FirstLeft = NewOutRec;
+                }
+            }
         }
-      }
-      //----------------------------------------------------------------------
+    }
 
-      private void FixupFirstLefts2(OutRec innerOutRec, OutRec outerOutRec)
-      {
+    private FixupFirstLefts2(innerOutRec:OutRec, outerOutRec:OutRec):void {
         //A polygon has split into two such that one is now the inner of the other.
         //It's possible that these polygons now wrap around other polygons, so check
         //every polygon that's also contained by OuterOutRec's FirstLeft container
         //(including nil) to see if they've become inner to the new inner polygon ...
-        OutRec orfl = outerOutRec.FirstLeft;
-        foreach (OutRec outRec in m_PolyOuts)
-        {
-          if (outRec.Pts == null || outRec == outerOutRec || outRec == innerOutRec) 
-            continue;
-          OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-          if (firstLeft != orfl && firstLeft != innerOutRec && firstLeft != outerOutRec) 
-            continue;
-          if (Poly2ContainsPoly1(outRec.Pts, innerOutRec.Pts))
-            outRec.FirstLeft = innerOutRec;
-          else if (Poly2ContainsPoly1(outRec.Pts, outerOutRec.Pts))
-            outRec.FirstLeft = outerOutRec;
-          else if (outRec.FirstLeft == innerOutRec || outRec.FirstLeft == outerOutRec) 
-            outRec.FirstLeft = orfl;
+        let orfl = outerOutRec.FirstLeft;
+        for (let outRec of this.m_PolyOuts) {
+            if (outRec.Pts == null || outRec == outerOutRec || outRec == innerOutRec) {
+                continue;
+            }
+            let firstLeft = ParseFirstLeft(outRec.FirstLeft);
+            if (firstLeft != orfl && firstLeft != innerOutRec && firstLeft != outerOutRec) {
+                continue;
+            }
+            if (Poly2ContainsPoly1(outRec.Pts, innerOutRec.Pts)) {
+                outRec.FirstLeft = innerOutRec;
+            } else if (Poly2ContainsPoly1(outRec.Pts, outerOutRec.Pts)) {
+                outRec.FirstLeft = outerOutRec;
+            } else if (outRec.FirstLeft == innerOutRec || outRec.FirstLeft == outerOutRec) {
+                outRec.FirstLeft = orfl;
+            }
         }
-      }
-      //----------------------------------------------------------------------
+    }
 
-      private void FixupFirstLefts3(OutRec OldOutRec, OutRec NewOutRec)
-      {
+    private FixupFirstLefts3(OldOutRec:OutRec, NewOutRec:OutRec):void {
         //same as FixupFirstLefts1 but doesn't call Poly2ContainsPoly1()
-        foreach (OutRec outRec in m_PolyOuts)
-        {
-          OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-          if (outRec.Pts != null && firstLeft == OldOutRec) 
-            outRec.FirstLeft = NewOutRec;
+        for (let outRec of this.m_PolyOuts) {
+            let firstLeft = ParseFirstLeft(outRec.FirstLeft);
+            if (outRec.Pts != null && firstLeft == OldOutRec) {
+                outRec.FirstLeft = NewOutRec;
+            }
         }
-      }
+    }
       //----------------------------------------------------------------------
-
-      private static OutRec ParseFirstLeft(OutRec FirstLeft)
-      {
-        while (FirstLeft != null && FirstLeft.Pts == null) 
-          FirstLeft = FirstLeft.FirstLeft;
-        return FirstLeft;
-      }
-      
 
     private void JoinCommonEdges()
       {
@@ -3656,38 +3728,6 @@ export class Clipper extends ClipperBase {
         }
       }
       
-
-      public static double Area(Path poly)
-      {
-        int cnt = (int)poly.Count;
-        if (cnt < 3) return 0;
-        double a = 0;
-        for (int i = 0, j = cnt - 1; i < cnt; ++i)
-        {
-          a += ((double)poly[j].X + poly[i].X) * ((double)poly[j].Y - poly[i].Y);
-          j = i;
-        }
-        return -a * 0.5;
-      }
-      
-
-      internal double Area(OutRec outRec)
-      {
-        return Area(outRec.Pts);
-      }
-      
-
-      internal double Area(OutPt op)
-      {
-        OutPt opFirst = op;
-        if (op == null) return 0;
-        double a = 0;
-        do {
-          a = a + (double)(op.Prev.Pt.X + op.Pt.X) * (double)(op.Prev.Pt.Y - op.Pt.Y);
-          op = op.Next;
-        } while (op != opFirst);
-        return a * 0.5;
-      }
 
       
       // SimplifyPolygon functions ...
