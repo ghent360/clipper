@@ -1,3 +1,14 @@
+/*
+ * A library to perform precise integer math operations on 64 and 128-bit signed
+ * numbers.
+ * 
+ * Copyright (c) 2017 Venelin Efremov
+ * 
+ * License:
+ * Use, modification & distribution is subject to Boost Software License Ver 1.
+ * http://www.boost.org/LICENSE_1_0.txt
+ *
+ */
 const TwoPow32: number = Math.pow(2, 32);
 const TwoPow64: number = Math.pow(2, 64);
 const TwoPow96: number = Math.pow(2, 96);

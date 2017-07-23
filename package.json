@@ -6,7 +6,11 @@
   "scripts": {
     "test": "mocha --opts mocha.opts"
   },
-  "author": "",
+  "author": "Venelin Efremov",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ghent360/clipper.git"
+  },
   "url": "http://www.angusj.com/delphi/clipper.php",
   "license": "SEE LICENSE IN license.txt",
   "devDependencies": {
