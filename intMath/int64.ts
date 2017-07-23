@@ -618,6 +618,10 @@ export class Int128 {
         }
     }
 
+    public static fromRoundNumber(value:number):Int64 {
+        return Int64.fromNumber(Math.round(value));
+    }
+
     public static fromInt(value:number):Int128 {
         let intValue = value | 0;
         if (!(intValue === value)) {
