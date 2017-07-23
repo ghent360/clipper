@@ -124,11 +124,12 @@ class IntRect {
 
 class PolyNode {
     public parent:PolyNode = null;
-    public polygon:Path = new Path();
+    public polygon:Path = new Array<IntPoint>();
     public index:number;
     public joinType:JoinType;
     public endType:EndType;
     public children:Array<PolyNode> = new Array<PolyNode>();
+    public isOpen:boolean;
 
     public isHole(): boolean {
         let result = true;
@@ -469,7 +470,7 @@ function TopX(edge:TEdge, currentY:Int64):Int64 {
     if (currentY.equals(edge.Top.y)) {
         return edge.Top.x;
     }
-    return edge.Bot.x + Math.round(edge.Dx * currentY.sub(edge.Bot.y).toNumber());
+    return edge.Bot.x.add(Int64.fromNumber(Math.round(edge.Dx * currentY.sub(edge.Bot.y).toNumber())));
 }
 
 function E2InsertsBeforeE1(e1:TEdge, e2:TEdge):boolean {
@@ -505,26 +506,26 @@ function FirstIsBottomPt(btmPt1:OutPt, btmPt2:OutPt):boolean {
     while (p.Pt.equals(btmPt1.Pt) && p != btmPt1) {
         p = p.Prev;
     }
-    let dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+    let dx1p = Math.abs(GetDx(btmPt1.Pt, p.Pt));
     p = btmPt1.Next;
     while (p.Pt.equals(btmPt1.Pt) && p != btmPt1) {
         p = p.Next;
     }
-    let dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+    let dx1n = Math.abs(GetDx(btmPt1.Pt, p.Pt));
 
     p = btmPt2.Prev;
     while (p.Pt.equals(btmPt2.Pt) && p != btmPt2) {
         p = p.Prev;
     }
-    let dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+    let dx2p = Math.abs(GetDx(btmPt2.Pt, p.Pt));
     p = btmPt2.Next;
     while (p.Pt.equals(btmPt2.Pt) && p != btmPt2) {
         p = p.Next;
     }
-    let dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+    let dx2n = Math.abs(GetDx(btmPt2.Pt, p.Pt));
 
-    if (Math.Max(dx1p, dx1n) == Math.Max(dx2p, dx2n)
-        && Math.Min(dx1p, dx1n) == Math.Min(dx2p, dx2n)) {
+    if (Math.max(dx1p, dx1n) == Math.max(dx2p, dx2n)
+        && Math.min(dx1p, dx1n) == Math.min(dx2p, dx2n)) {
         return this.Area(btmPt1) > 0; //if otherwise identical use orientation
     }
     return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
@@ -645,7 +646,7 @@ function GetHorzDirection(HorzEdge:TEdge):{Dir:Direction, Left:Int64, Right:Int6
 }
 
 function GetNextInAEL(e:TEdge, direction:Direction):TEdge {
-    return direction == direction.dLeftToRight ? e.NextInAEL: e.PrevInAEL;
+    return direction == Direction.dLeftToRight ? e.NextInAEL: e.PrevInAEL;
 }
 
 function IsMinima(e:TEdge):boolean {
@@ -654,14 +655,14 @@ function IsMinima(e:TEdge):boolean {
         && e.Next.NextInLML != e;
 }
 
-function IsMaxima(e:TEdge, y:number):boolean {
+function IsMaxima(e:TEdge, y:Int64):boolean {
     return e != null 
-        && e.Top.y.equals(Int64.fromNumber(y))
+        && e.Top.y.equals(y)
         && e.NextInLML == null;
 }
 
-function IsIntermediate(e:TEdge, y:number):boolean {
-    return e.Top.y.equals(Int64.fromNumber(y))
+function IsIntermediate(e:TEdge, y:Int64):boolean {
+    return e.Top.y.equals(y)
         && e.NextInLML != null;
 }
 
@@ -690,68 +691,70 @@ function Round(value:number):Int64 {
 }
 
 function IntersectPoint(edge1:TEdge, edge2:TEdge):IntPoint {
-    let ip = new IntPoint();
     let b1:number;
     let b2:number;
+    let ipx:Int64;
+    let ipy:Int64;
+
     //nb: with very large coordinate values, it's possible for SlopesEqual() to 
     //return false but for the edge.Dx value be equal due to double precision rounding.
     if (edge1.Dx == edge2.Dx) {
-        ip.y = edge1.Curr.y;
-        ip.x = TopX(edge1, ip.y);
-        return ip;
+        ipy = edge1.Curr.y;
+        ipx = TopX(edge1, ipy);
+        return new IntPoint(ipx, ipy);
     }
 
     if (edge1.Delta.x.isZero()) {
-        ip.x = edge1.Bot.x;
+        ipx = edge1.Bot.x;
         if (IsHorizontal(edge2)) {
-            ip.y = edge2.Bot.y;
+            ipy = edge2.Bot.y;
         } else {
             b2 = edge2.Bot.y.toNumber() - edge2.Bot.x.toNumber() / edge2.Dx;
-            ip.y = Round(ip.x.toNumber() / edge2.Dx + b2);
+            ipy = Round(ipx.toNumber() / edge2.Dx + b2);
         }
     } else if (edge2.Delta.x.isZero()) {
-        ip.x = edge2.Bot.x;
+        ipx = edge2.Bot.x;
         if (IsHorizontal(edge1)) {
-            ip.y = edge1.Bot.y;
+            ipy = edge1.Bot.y;
         } else {
             b1 = edge1.Bot.y.toNumber() - edge1.Bot.x.toNumber() / edge1.Dx;
-            ip.y = Round(ip.x.toNumber() / edge1.Dx + b1);
+            ipy = Round(ipx.toNumber() / edge1.Dx + b1);
         }
     } else {
         b1 = edge1.Bot.x.toNumber() - edge1.Bot.y.toNumber() * edge1.Dx;
         b2 = edge2.Bot.x.toNumber() - edge2.Bot.y.toNumber() * edge2.Dx;
         let q = (b2 - b1) / (edge1.Dx - edge2.Dx);
-        ip.y = Round(q);
-        if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx)) {
-            ip.x = Round(edge1.Dx * q + b1);
+        ipy = Round(q);
+        if (Math.abs(edge1.Dx) < Math.abs(edge2.Dx)) {
+            ipx = Round(edge1.Dx * q + b1);
         } else {
-            ip.x = Round(edge2.Dx * q + b2);
+            ipx = Round(edge2.Dx * q + b2);
         }
     }
 
-    if (ip.y.lessThan(edge1.Top.y) || ip.y.lessThan(edge2.Top.y)) {
+    if (ipy.lessThan(edge1.Top.y) || ipy.lessThan(edge2.Top.y)) {
         if (edge1.Top.y.greaterThan(edge2.Top.y)) {
-            ip.y = edge1.Top.y;
+            ipy = edge1.Top.y;
         } else {
-            ip.y = edge2.Top.y;
+            ipy = edge2.Top.y;
         }
-        if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx)) {
-            ip.x = TopX(edge1, ip.y);
+        if (Math.abs(edge1.Dx) < Math.abs(edge2.Dx)) {
+            ipx = TopX(edge1, ipy);
         } else {
-            ip.x = TopX(edge2, ip.y);
+            ipx = TopX(edge2, ipy);
         }
     }
     //finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
-    if (ip.y.greaterThan(edge1.Curr.y)) {
-        ip.y = edge1.Curr.y;
+    if (ipy.greaterThan(edge1.Curr.y)) {
+        ipy = edge1.Curr.y;
         //better to use the more vertical edge to derive X ...
-        if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx)) {
-            ip.x = TopX(edge2, ip.y);
+        if (Math.abs(edge1.Dx) > Math.abs(edge2.Dx)) {
+            ipx = TopX(edge2, ipy);
         } else {
-            ip.x = TopX(edge1, ip.y);
+            ipx = TopX(edge1, ipy);
         }
     }
-    return ip;
+    return new IntPoint(ipx, ipy);
 }
 
 function EdgesAdjacent(inode:IntersectNode):boolean {
@@ -785,7 +788,7 @@ function AreaPoly(poly:Path):number {
 }
 
 function AreaOutRec(outRec:OutRec):number {
-    return AreaPoly(outRec.Pts);
+    return AreaOutPt(outRec.Pts);
 }
 
 function AreaOutPt(op:OutPt):number {
@@ -802,10 +805,10 @@ function AreaOutPt(op:OutPt):number {
 }
 
 function Area(shape:OutPt|OutRec|Path):number {
-    if (typeof shape == OutPt) {
+    if (shape instanceof OutPt) {
         return AreaOutPt(shape);
     }
-    if (typeof shape == OutRec) {
+    if (shape instanceof OutRec) {
         return AreaOutRec(shape);
     }
     return AreaPoly(shape);
@@ -886,7 +889,7 @@ function PointInPolygonPath(pt:IntPoint, path:Path):number {
     let ip = path[0];
     for (let i = 1; i <= cnt; ++i) {
         let ipNext = (i == cnt ? path[0] : path[i]);
-        if (ipNext.y.equals(pt.Y)) {
+        if (ipNext.y.equals(pt.y)) {
             if (ipNext.x.equals(pt.x)
                 || (ip.y.equals(pt.y) 
                     && (ipNext.x.greaterThan(pt.x) == ip.x.lessThan(pt.x)))) {
@@ -981,7 +984,7 @@ function PointInPolygonOutPt(pt:IntPoint, op:OutPt):number {
 }
 
 function PointInPolygon(pt:IntPoint, shape:OutPt|Path):number {
-    if (typeof shape == OutPt) {
+    if (shape instanceof OutPt) {
         return PointInPolygonOutPt(pt, shape);
     }
     return PointInPolygonPath(pt, shape);
@@ -1005,6 +1008,72 @@ function ParseFirstLeft(FirstLeft:OutRec):OutRec {
         FirstLeft = FirstLeft.FirstLeft;
     }
     return FirstLeft;
+}
+
+function UpdateOutPtIdxs(outrec:OutRec):void {  
+    let op = outrec.Pts;
+    do {
+        op.Idx = outrec.Idx;
+        op = op.Prev;
+    } while(op != outrec.Pts);
+}
+
+function DistanceSqrd(pt1:IntPoint, pt2:IntPoint):number {
+    let dx = pt1.x.sub(pt2.x).toNumber();
+    let dy = pt1.y.sub(pt2.y).toNumber();
+    return dx*dx + dy*dy;
+}
+
+function DistanceFromLineSqrd(pt:IntPoint, ln1:IntPoint, ln2:IntPoint):number {
+    //The equation of a line in general form (Ax + By + C = 0)
+    //given 2 points (x¹,y¹) & (x²,y²) is ...
+    //(y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
+    //A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
+    //perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
+    //see http://en.wikipedia.org/wiki/Perpendicular_distance
+    let A = ln1.y.sub(ln2.y).toNumber();
+    let B = ln2.x.sub(ln1.x).toNumber();
+    let C = A * ln1.x.toNumber()  + B * ln1.y.toNumber();
+    C = A * pt.x.toNumber() + B * pt.y.toNumber() - C;
+    return (C * C) / (A * A + B * B);
+}
+
+
+function SlopesNearCollinear(pt1:IntPoint, pt2:IntPoint, pt3:IntPoint, distSqrd:number):boolean {
+    //this function is more accurate when the point that's GEOMETRICALLY 
+    //between the other 2 points is the one that's tested for distance.  
+    //nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts                    
+    if (pt1.x.sub(pt2.x).abs().greaterThan(pt1.y.sub(pt2.y).abs())) {
+        if (pt1.x.greaterThan(pt2.x) == pt1.x.lessThan(pt3.x)) {
+            return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
+        } else if (pt2.x.greaterThan(pt1.x) == pt2.x.lessThan(pt3.x)) {
+            return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
+        }
+        return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
+    } else {
+        if (pt1.y.greaterThan(pt2.y) == pt1.y.lessThan(pt3.y)) {
+            return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
+        } else if (pt2.y.greaterThan(pt1.y) == pt2.y.lessThan(pt3.y)) {
+            return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
+        }
+        return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
+    }
+}
+
+function PointsAreClose(pt1:IntPoint, pt2:IntPoint, distSqrd:number):boolean {
+    return DistanceSqrd(pt1, pt2) <= distSqrd;
+}
+
+function ExcludeOp(op:OutPt):OutPt {
+    let result = op.Prev;
+    result.Next = op.Next;
+    op.Next.Prev = result;
+    result.Idx = 0;
+    return result;
+}
+
+function XOR(a:boolean, b:boolean):boolean {
+  return ( a || b ) && !( a && b );
 }
 
 class ClipperBase {
@@ -1172,7 +1241,7 @@ class ClipperBase {
         return Result;
     }
 
-    private Reset():void {
+    Reset():void {
         this.m_CurrentLM = this.m_MinimaList;
         if (this.m_CurrentLM == null) return; //ie nothing to process
 
@@ -1584,6 +1653,7 @@ export class Clipper extends ClipperBase {
     StrictlySimple:boolean;
 
     constructor(InitOptions:number = 0) {
+        super();
         this.m_Scanbeam = null;
         this.m_Maxima = null;
         this.m_ActiveEdges = null;
@@ -1607,7 +1677,7 @@ export class Clipper extends ClipperBase {
             this.m_Maxima = newMax;
             this.m_Maxima.Next = null;
             this.m_Maxima.Prev = null;
-        } else if (X.lessThan(m_Maxima.X)) {
+        } else if (X.lessThan(this.m_Maxima.X)) {
             newMax.Next = this.m_Maxima;
             newMax.Prev = null;
             this.m_Maxima = newMax;
@@ -1629,17 +1699,15 @@ export class Clipper extends ClipperBase {
         }
     }
 
-    public Execute(clipType:ClipType, solution:Paths, 
+    public Execute(clipType:ClipType, solution:PolyTree|Paths,
         fillType:PolyFillType = PolyFillType.pftEvenOdd):boolean {
-        return Execute(clipType, solution, fillType, fillType);
+        if  (solution instanceof PolyTree) {
+            return this.ExecutePolyTree(clipType, solution, fillType, fillType);
+        }
+        return this.ExecutePaths(clipType, solution, fillType, fillType);
     }
 
-    public Execute(clipType:ClipType, polytree:PolyTree,
-        FillType:PolyFillType = PolyFillType.pftEvenOdd):boolean {
-        return Execute(clipType, polytree, FillType, FillType);
-    }
-
-    public Execute(clipType:ClipType, solution:Paths,
+    public ExecutePaths(clipType:ClipType, solution:Paths,
         subjFillType:PolyFillType, clipFillType:PolyFillType):boolean {
         if (this.m_ExecuteLocked) {
           return false;
@@ -1649,26 +1717,26 @@ export class Clipper extends ClipperBase {
         }
 
         this.m_ExecuteLocked = true;
-        solution.Clear();
+        solution.length = 0;
         this.m_SubjFillType = subjFillType;
         this.m_ClipFillType = clipFillType;
         this.m_ClipType = clipType;
         this.m_UsingPolyTree = false;
         let succeeded:boolean;
         try {
-            succeeded = ExecuteInternal();
+            succeeded = this.ExecuteInternal();
             //build the return polygons ...
             if (succeeded) {
-              BuildResult(solution);
+              this.BuildResult(solution);
             }
         } finally {
-            DisposeAllPolyPts();
+            this.DisposeAllPolyPts();
             this.m_ExecuteLocked = false;
         }
         return succeeded;
     }
 
-    public Execute(clipType:ClipType, polytree:PolyTree,
+    public ExecutePolyTree(clipType:ClipType, polytree:PolyTree,
         subjFillType:PolyFillType, clipFillType:PolyFillType):boolean {
         if (this.m_ExecuteLocked) {
             return false;
@@ -1680,13 +1748,13 @@ export class Clipper extends ClipperBase {
         this.m_UsingPolyTree = true;
         let succeeded:boolean;
         try {
-            succeeded = ExecuteInternal();
+            succeeded = this.ExecuteInternal();
             //build the return polygons ...
             if (succeeded) {
-                BuildResult2(polytree);
+                this.BuildResult2(polytree);
             }
         } finally {
-            DisposeAllPolyPts();
+            this.DisposeAllPolyPts();
             this.m_ExecuteLocked = false;
         }
         return succeeded;
@@ -1711,7 +1779,7 @@ export class Clipper extends ClipperBase {
 
     private ExecuteInternal():boolean {
         try {
-            Reset();
+            this.Reset();
             this.m_SortedEdges = null;
             this.m_Maxima = null;
 
@@ -1725,10 +1793,10 @@ export class Clipper extends ClipperBase {
             botY = r.Y;
             this.InsertLocalMinimaIntoAEL(botY);
             r = this.PopScanbeam();
-            while (r.r || this.LocalMinimaPending()) {
+            while (r.r || this.LocalMinimaPending) {
                 topY = r.Y;
                 this.ProcessHorizontals();
-                this.m_GhostJoins.Clear();
+                this.m_GhostJoins.length = 0;
                 if (!this.ProcessIntersections(topY)) {
                     return false;
                 }
@@ -1743,8 +1811,8 @@ export class Clipper extends ClipperBase {
                 if (outRec.Pts == null || outRec.IsOpen) {
                     continue;
                 }
-                if ((outRec.IsHole ^ ReverseSolution) == (Area(outRec) > 0)) {
-                    this.ReversePolyPtLinks(outRec.Pts);
+                if (XOR(outRec.IsHole, this.ReverseSolution) == (Area(outRec) > 0)) {
+                    ReversePolyPtLinks(outRec.Pts);
                 }
             }
 
@@ -1774,7 +1842,7 @@ export class Clipper extends ClipperBase {
         for (let i = 0; i < this.m_PolyOuts.length; ++i) {
             this.DisposeOutRec(i);
         }
-        m_PolyOuts.length = 0;
+        this.m_PolyOuts.length = 0;
     }
 
     private AddJoin(Op1:OutPt, Op2:OutPt, OffPt:IntPoint):void {
@@ -1811,27 +1879,27 @@ export class Clipper extends ClipperBase {
                 if (this.IsContributing(lb)) {
                   Op1 = this.AddOutPt(lb, lb.Bot);
                 }
-                this.InsertScanbeam(lb.Top.Y);
+                this.InsertScanbeam(lb.Top.y);
             } else {
                 this.InsertEdgeIntoAEL(lb, null);
                 this.InsertEdgeIntoAEL(rb, lb);
                 this.SetWindingCount(lb);
-                this.rb.WindCnt = lb.WindCnt;
-                this.rb.WindCnt2 = lb.WindCnt2;
+                rb.WindCnt = lb.WindCnt;
+                rb.WindCnt2 = lb.WindCnt2;
                 if (this.IsContributing(lb)) {
                     Op1 = this.AddLocalMinPoly(lb, rb, lb.Bot);
                 }
-                this.InsertScanbeam(lb.Top.Y);
+                this.InsertScanbeam(lb.Top.y);
             }
 
             if (rb != null) {
                 if (IsHorizontal(rb)) {
                     if (rb.NextInLML != null) {
-                        this.InsertScanbeam(rb.NextInLML.Top.Y);
+                        this.InsertScanbeam(rb.NextInLML.Top.y);
                     }
                     this.AddEdgeToSEL(rb);
                 } else {
-                    this.InsertScanbeam(rb.Top.Y);
+                    this.InsertScanbeam(rb.Top.y);
                 }
             }
 
@@ -1848,7 +1916,7 @@ export class Clipper extends ClipperBase {
                     //if the horizontal Rb and a 'ghost' horizontal overlap, then convert
                     //the 'ghost' join to a real join ready for later ...
                     let j = this.m_GhostJoins[i];
-                    if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X)) {
+                    if (HorzSegmentsOverlap(j.OutPt1.Pt.x, j.OffPt.x, rb.Bot.x, rb.Top.x)) {
                         this.AddJoin(j.OutPt1, Op1, j.OffPt);
                     }
                 }
@@ -1856,9 +1924,9 @@ export class Clipper extends ClipperBase {
 
             if (lb.OutIdx >= 0 
                 && lb.PrevInAEL != null 
-                && lb.PrevInAEL.Curr.X == lb.Bot.X
+                && lb.PrevInAEL.Curr.x.equals(lb.Bot.x)
                 && lb.PrevInAEL.OutIdx >= 0
-                && SlopesEqual4P(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, m_UseFullRange)
+                && SlopesEqual4P(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, this.m_UseFullRange)
                 && lb.WindDelta != 0 
                 && lb.PrevInAEL.WindDelta != 0) {
                 let Op2 = this.AddOutPt(lb.PrevInAEL, lb.Bot);
@@ -1868,7 +1936,7 @@ export class Clipper extends ClipperBase {
             if( lb.NextInAEL != rb ) {
                 if (rb.OutIdx >= 0 
                     && rb.PrevInAEL.OutIdx >= 0 
-                    && SlopesEqual4P(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, m_UseFullRange)
+                    && SlopesEqual4P(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, this.m_UseFullRange)
                     && rb.WindDelta != 0 
                     && rb.PrevInAEL.WindDelta != 0) {
                   let Op2 = this.AddOutPt(rb.PrevInAEL, rb.Bot);
@@ -1889,14 +1957,14 @@ export class Clipper extends ClipperBase {
     }
 
     private InsertEdgeIntoAEL(edge:TEdge, startEdge:TEdge):void {
-        if (m_ActiveEdges == null) {
+        if (this.m_ActiveEdges == null) {
             edge.PrevInAEL = null;
             edge.NextInAEL = null;
             this.m_ActiveEdges = edge;
         } else if (startEdge == null 
-            && this.E2InsertsBeforeE1(m_ActiveEdges, edge)) {
+            && E2InsertsBeforeE1(this.m_ActiveEdges, edge)) {
             edge.PrevInAEL = null;
-            edge.NextInAEL = m_ActiveEdges;
+            edge.NextInAEL = this.m_ActiveEdges;
             this.m_ActiveEdges.PrevInAEL = edge;
             this.m_ActiveEdges = edge;
         } else {
@@ -1949,7 +2017,7 @@ export class Clipper extends ClipperBase {
                 }
                 break;
             case PolyFillType.pftNonZero:
-                if (Math.Abs(edge.WindCnt) != 1) {
+                if (Math.abs(edge.WindCnt) != 1) {
                     return false;
                 }
                 break;
@@ -1965,7 +2033,7 @@ export class Clipper extends ClipperBase {
                 break;
         }
 
-        switch (m_ClipType) {
+        switch (this.m_ClipType) {
             case ClipType.ctIntersection:
                 switch (pft2) {
                     case PolyFillType.pftEvenOdd:
@@ -1976,7 +2044,6 @@ export class Clipper extends ClipperBase {
                     default:
                         return (edge.WindCnt2 < 0);
                 }
-                break;
           case ClipType.ctUnion:
                 switch (pft2) {
                     case PolyFillType.pftEvenOdd:
@@ -1987,7 +2054,6 @@ export class Clipper extends ClipperBase {
                     default:
                         return (edge.WindCnt2 >= 0);
                 }
-                break;
           case ClipType.ctDifference:
               if (edge.PolyTyp == PolyType.ptSubject) {
                   switch (pft2) {
@@ -2010,7 +2076,6 @@ export class Clipper extends ClipperBase {
                           return (edge.WindCnt2 < 0);
                   }
               }
-              break;
           case ClipType.ctXor:
               if (edge.WindDelta == 0) {//XOr always contributing unless open
                   switch (pft2) {
@@ -2044,7 +2109,7 @@ export class Clipper extends ClipperBase {
                 edge.WindCnt = edge.WindDelta;
             }
             edge.WindCnt2 = 0;
-            e = m_ActiveEdges; //ie get ready to calc WindCnt2
+            e = this.m_ActiveEdges; //ie get ready to calc WindCnt2
         } else if (edge.WindDelta == 0 && this.m_ClipType != ClipType.ctUnion) {
             edge.WindCnt = 1;
             edge.WindCnt2 = e.WindCnt2;
@@ -2072,7 +2137,7 @@ export class Clipper extends ClipperBase {
             if (e.WindCnt * e.WindDelta < 0) {
                 //prev edge is 'decreasing' WindCount (WC) toward zero
                 //so we're outside the previous polygon ...
-                if (Math.Abs(e.WindCnt) > 1) {
+                if (Math.abs(e.WindCnt) > 1) {
                     //outside prev poly but still inside another.
                     //when reversing direction of prev poly use the same WC 
                     if (e.WindDelta * edge.WindDelta < 0) {
@@ -2124,15 +2189,15 @@ export class Clipper extends ClipperBase {
         //SEL pointers in PEdge are use to build transient lists of horizontal edges.
         //However, since we don't need to worry about processing order, all additions
         //are made to the front of the list ...
-        if (m_SortedEdges == null) {
-            m_SortedEdges = edge;
+        if (this.m_SortedEdges == null) {
+            this.m_SortedEdges = edge;
             edge.PrevInSEL = null;
             edge.NextInSEL = null;
         } else {
-            edge.NextInSEL = m_SortedEdges;
+            edge.NextInSEL = this.m_SortedEdges;
             edge.PrevInSEL = null;
-            m_SortedEdges.PrevInSEL = edge;
-            m_SortedEdges = edge;
+            this.m_SortedEdges.PrevInSEL = edge;
+            this.m_SortedEdges = edge;
         }
     }
 
@@ -2148,7 +2213,7 @@ export class Clipper extends ClipperBase {
         }
         oldE.NextInSEL = null;
         oldE.PrevInSEL = null;
-        return true;
+        return oldE;
     }
      
     private CopyAELToSEL():void {
@@ -2218,9 +2283,9 @@ export class Clipper extends ClipperBase {
         }
 
         if (edge1.PrevInSEL == null) {
-            m_SortedEdges = edge1;
+            this.m_SortedEdges = edge1;
         } else if (edge2.PrevInSEL == null) {
-            m_SortedEdges = edge2;
+            this.m_SortedEdges = edge2;
         }
     }
 
@@ -2271,13 +2336,13 @@ export class Clipper extends ClipperBase {
             && prevE.OutIdx >= 0 
             && prevE.Top.y.lessThan(pt.y)
             && e.Top.y.lessThan(pt.y)) {
-            let xPrev = TopX(prevE, pt.Y);
-            let xE = TopX(e, pt.Y);
+            let xPrev = TopX(prevE, pt.y);
+            let xE = TopX(e, pt.y);
             if (xPrev.equals(xE)
                 && e.WindDelta != 0
                 && prevE.WindDelta != 0
                 && SlopesEqual4P(
-                    new IntPoint(xPrev, pt.Y), prevE.Top, new IntPoint(xE, pt.Y), e.Top, m_UseFullRange)) {
+                    new IntPoint(xPrev, pt.y), prevE.Top, new IntPoint(xE, pt.y), e.Top, this.m_UseFullRange)) {
                 let outPt = this.AddOutPt(prevE, pt);
                 this.AddJoin(result, outPt, e.Top);
             }
@@ -2288,7 +2353,7 @@ export class Clipper extends ClipperBase {
 
     private AddOutPt(e:TEdge, pt:IntPoint):OutPt {
         if (e.OutIdx < 0) {
-            let outRec = CreateOutRec();
+            let outRec = this.CreateOutRec();
             outRec.IsOpen = (e.WindDelta == 0);
             let newOp = new OutPt();
             outRec.Pts = newOp;
@@ -2484,7 +2549,7 @@ export class Clipper extends ClipperBase {
                 }
             } else if (e1.PolyTyp != e2.PolyTyp) {
                 if (e1.WindDelta == 0 
-                    && Math.Abs(e2.WindCnt) == 1 
+                    && Math.abs(e2.WindCnt) == 1 
                     && (this.m_ClipType != ClipType.ctUnion || e2.WindCnt2 == 0)) {
                     this.AddOutPt(e1, pt);
                     if (e1Contributing) {
@@ -2492,7 +2557,7 @@ export class Clipper extends ClipperBase {
                     }
                 }
                 else if (e2.WindDelta == 0
-                    && Math.Abs(e1.WindCnt) == 1
+                    && Math.abs(e1.WindCnt) == 1
                     && (this.m_ClipType != ClipType.ctUnion || e1.WindCnt2 == 0)) {
                     this.AddOutPt(e2, pt);
                     if (e2Contributing) {
@@ -2541,18 +2606,18 @@ export class Clipper extends ClipperBase {
         let e2FillType2:PolyFillType;
 
         if (e1.PolyTyp == PolyType.ptSubject) {
-            e1FillType = m_SubjFillType;
-            e1FillType2 = m_ClipFillType;
+            e1FillType = this.m_SubjFillType;
+            e1FillType2 = this.m_ClipFillType;
         } else {
-            e1FillType = m_ClipFillType;
-            e1FillType2 = m_SubjFillType;
+            e1FillType = this.m_ClipFillType;
+            e1FillType2 = this.m_SubjFillType;
         }
         if (e2.PolyTyp == PolyType.ptSubject) {
-            e2FillType = m_SubjFillType;
-            e2FillType2 = m_ClipFillType;
+            e2FillType = this.m_SubjFillType;
+            e2FillType2 = this.m_ClipFillType;
         } else {
-            e2FillType = m_ClipFillType;
-            e2FillType2 = m_SubjFillType;
+            e2FillType = this.m_ClipFillType;
+            e2FillType2 = this.m_SubjFillType;
         }
 
         let e1Wc:number;
@@ -2565,7 +2630,7 @@ export class Clipper extends ClipperBase {
                 e1Wc = -e1.WindCnt;
                 break;
             default:
-                e1Wc = Math.Abs(e1.WindCnt);
+                e1Wc = Math.abs(e1.WindCnt);
                 break;
         }
         switch (e2FillType) {
@@ -2576,7 +2641,7 @@ export class Clipper extends ClipperBase {
                 e2Wc = -e2.WindCnt;
                 break;
             default:
-                e2Wc = Math.Abs(e2.WindCnt);
+                e2Wc = Math.abs(e2.WindCnt);
                 break;
         }
 
@@ -2605,8 +2670,8 @@ export class Clipper extends ClipperBase {
             }
         } else if ((e1Wc == 0 || e1Wc == 1) && (e2Wc == 0 || e2Wc == 1)) {
             //neither edge is currently contributing ...
-            let e1Wc2:Int64;
-            let e2Wc2:Int64;
+            let e1Wc2:number;
+            let e2Wc2:number;
             switch (e1FillType2) {
                 case PolyFillType.pftPositive:
                     e1Wc2 = e1.WindCnt2;
@@ -2615,7 +2680,7 @@ export class Clipper extends ClipperBase {
                     e1Wc2 = -e1.WindCnt2;
                     break;
                 default:
-                    e1Wc2 = Math.Abs(e1.WindCnt2);
+                    e1Wc2 = Math.abs(e1.WindCnt2);
                     break;
             }
             switch (e2FillType2) {
@@ -2626,7 +2691,7 @@ export class Clipper extends ClipperBase {
                     e2Wc2 = -e2.WindCnt2;
                     break;
                 default:
-                    e2Wc2 = Math.Abs(e2.WindCnt2);
+                    e2Wc2 = Math.abs(e2.WindCnt2);
                     break;
             }
 
@@ -2818,7 +2883,7 @@ export class Clipper extends ClipperBase {
         } //end for (;;)
 
         if (horzEdge.OutIdx >= 0 && op1 == null) {
-            op1 = GetLastOutPt(horzEdge);
+            op1 = this.GetLastOutPt(horzEdge);
             let eNextHorz = this.m_SortedEdges;
             while (eNextHorz != null) {
                 if (eNextHorz.OutIdx >= 0
@@ -2833,7 +2898,7 @@ export class Clipper extends ClipperBase {
 
         if (horzEdge.NextInLML != null) {
             if(horzEdge.OutIdx >= 0) {
-                op1 = AddOutPt( horzEdge, horzEdge.Top);
+                op1 = this.AddOutPt( horzEdge, horzEdge.Top);
 
                 horzEdge = this.UpdateEdgeIntoAEL(horzEdge);
                 if (horzEdge.WindDelta == 0) {
@@ -2848,7 +2913,7 @@ export class Clipper extends ClipperBase {
                     && ePrev.WindDelta != 0 
                     && ePrev.OutIdx >= 0
                     && ePrev.Curr.y.greaterThan(ePrev.Top.y)
-                    && SlopesEqual(horzEdge, ePrev, this.m_UseFullRange)) {
+                    && SlopesEqual2E(horzEdge, ePrev, this.m_UseFullRange)) {
                     let op2 = this.AddOutPt(ePrev, horzEdge.Bot);
                     this.AddJoin(op1, op2, horzEdge.Top);
                 } else if (eNext != null
@@ -2857,7 +2922,7 @@ export class Clipper extends ClipperBase {
                     && eNext.WindDelta != 0
                     && eNext.OutIdx >= 0
                     && eNext.Curr.y.greaterThan(eNext.Top.y)
-                    && SlopesEqual(horzEdge, eNext, this.m_UseFullRange)) {
+                    && SlopesEqual2E(horzEdge, eNext, this.m_UseFullRange)) {
                     let op2 = this.AddOutPt(eNext, horzEdge.Bot);
                     this.AddJoin(op1, op2, horzEdge.Top);
                 }
@@ -2883,7 +2948,7 @@ export class Clipper extends ClipperBase {
             }
             if (this.m_IntersectList.length == 1
                 || this.FixupIntersectionOrder()) {
-                ProcessIntersectList();
+                this.ProcessIntersectList();
             } else {
                 return false;
             }
@@ -2915,7 +2980,7 @@ export class Clipper extends ClipperBase {
         let isModified = true;
         while (isModified && this.m_SortedEdges != null) {
             isModified = false;
-            e = this,m_SortedEdges;
+            e = this.m_SortedEdges;
             while (e.NextInSEL != null) {
                 let eNext = e.NextInSEL;
                 let pt:IntPoint;
@@ -2967,7 +3032,7 @@ export class Clipper extends ClipperBase {
                 this.m_IntersectList[i] = this.m_IntersectList[j];
                 this.m_IntersectList[j] = tmp;
             }
-            this.SwapPositionsInSEL(m_IntersectList[i].Edge1, m_IntersectList[i].Edge2);
+            this.SwapPositionsInSEL(this.m_IntersectList[i].Edge1, this.m_IntersectList[i].Edge2);
         }
         return true;
     }
@@ -2977,7 +3042,7 @@ export class Clipper extends ClipperBase {
             this.IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
             this.SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
         }
-        m_IntersectList.length = 0;
+        this.m_IntersectList.length = 0;
     }
   
     private ProcessEdgesAtTopOfScanbeam(topY:Int64):void {
@@ -2993,11 +3058,11 @@ export class Clipper extends ClipperBase {
             }
 
             if (IsMaximaEdge) {
-                if (StrictlySimple) {
-                    InsertMaxima(e.Top.X);
+                if (this.StrictlySimple) {
+                    this.InsertMaxima(e.Top.x);
                 }
                 let ePrev = e.PrevInAEL;
-                DoMaxima(e);
+                this.DoMaxima(e);
                 if (ePrev == null) {
                     e = this.m_ActiveEdges;
                 } else {
@@ -3059,7 +3124,7 @@ export class Clipper extends ClipperBase {
                     && op != null
                     && ePrev.OutIdx >= 0 
                     && ePrev.Curr.y.greaterThan(ePrev.Top.y)
-                    && SlopesEqual(e.Curr, e.Top, ePrev.Curr, ePrev.Top, this.m_UseFullRange)
+                    && SlopesEqual4P(e.Curr, e.Top, ePrev.Curr, ePrev.Top, this.m_UseFullRange)
                     && e.WindDelta != 0
                     && ePrev.WindDelta != 0) {
                     let op2 = this.AddOutPt(ePrev, e.Bot);
@@ -3070,7 +3135,7 @@ export class Clipper extends ClipperBase {
                     && op != null
                     && eNext.OutIdx >= 0
                     && eNext.Curr.y.greaterThan(eNext.Top.y)
-                    && SlopesEqual(e.Curr, e.Top, eNext.Curr, eNext.Top, this.m_UseFullRange)
+                    && SlopesEqual4P(e.Curr, e.Top, eNext.Curr, eNext.Top, this.m_UseFullRange)
                     && e.WindDelta != 0
                     && eNext.WindDelta != 0) {
                     let op2 = this.AddOutPt(eNext, e.Bot);
@@ -3150,7 +3215,7 @@ export class Clipper extends ClipperBase {
 
         //add each output polygon/contour to polytree ...
         //polytree.m_AllPolys.length = this.m_PolyOuts.length;
-        for (let outRec of m_PolyOuts) {
+        for (let outRec of this.m_PolyOuts) {
             let cnt = PointCount(outRec.Pts);
             if ((outRec.IsOpen && cnt < 2) 
                 || (!outRec.IsOpen && cnt < 3)) {
@@ -3158,12 +3223,12 @@ export class Clipper extends ClipperBase {
             }
             this.FixHoleLinkage(outRec);
             let pn = new PolyNode();
-            polytree.m_AllPolys.push(pn);
+            polytree.allPolys.push(pn);
             outRec.PolyNode = pn;
             //pn.m_polygon.length = cnt;
             let op = outRec.Pts.Prev;
             for (let j = 0; j < cnt; j++) {
-                pn.m_polygon.push(op.Pt);
+                pn.polygon.push(op.Pt);
                 op = op.Prev;
             }
         }
@@ -3174,7 +3239,7 @@ export class Clipper extends ClipperBase {
             if (outRec.PolyNode == null) {
                 continue;
             } else if (outRec.IsOpen) {
-                outRec.PolyNode.IsOpen = true;
+                outRec.PolyNode.isOpen = true;
                 polytree.addChild(outRec.PolyNode);
             } else if (outRec.FirstLeft != null
                 && outRec.FirstLeft.PolyNode != null) {
@@ -3220,7 +3285,7 @@ export class Clipper extends ClipperBase {
             //test for duplicate points and collinear edges ...
             if (pp.Pt == pp.Next.Pt
                 || pp.Pt == pp.Prev.Pt
-                || (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt, this.m_UseFullRange)
+                || (SlopesEqual3P(pp.Prev.Pt, pp.Pt, pp.Next.Pt, this.m_UseFullRange)
                     && (!preserveCol || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt)))) {
                 lastOK = null;
                 pp.Prev.Next = pp.Next;
@@ -3420,13 +3485,13 @@ export class Clipper extends ClipperBase {
                 return false; //a flat 'polygon'
             }
 
-            let r = GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X);
+            let r = GetOverlap(op1.Pt.x, op1b.Pt.x, op2.Pt.x, op2b.Pt.x);
             //Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
             if (!r.r) {
                 return false;
             }
             let Left = r.Left;
-            let Rigth = r.Right;
+            let Right = r.Right;
 
             //DiscardLeftSide: when overlapping edges are joined, a spike will created
             //which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
@@ -3451,7 +3516,7 @@ export class Clipper extends ClipperBase {
             }
             j.OutPt1 = op1;
             j.OutPt2 = op2;
-            return JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
+            return this.JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
         } else {
             //nb: For non-horizontal joins ...
             //    1. Jr.OutPt1.Pt.Y == Jr.OutPt2.Pt.Y
@@ -3463,14 +3528,14 @@ export class Clipper extends ClipperBase {
                 op1b = op1b.Next;
             }
             let Reverse1 = (op1b.Pt.y.greaterThan(op1.Pt.y) 
-                || !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange));
+                || !SlopesEqual3P(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange));
             if (Reverse1) {
                 op1b = op1.Prev;
                 while (op1b.Pt.equals(op1.Pt) && op1b != op1) {
                     op1b = op1b.Prev;
                 }
                 if (op1b.Pt.y.greaterThan(op1.Pt.y)
-                    || !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange)) {
+                    || !SlopesEqual3P(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange)) {
                     return false;
                 }
             }
@@ -3479,14 +3544,14 @@ export class Clipper extends ClipperBase {
                 op2b = op2b.Next;
             }
             let Reverse2 = (op2b.Pt.y.greaterThan(op2.Pt.y)
-                || !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange));
+                || !SlopesEqual3P(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange));
             if (Reverse2) {
                 op2b = op2.Prev;
                 while (op2b.Pt.equals(op2.Pt) && op2b != op2) {
                     op2b = op2b.Prev;
                 }
                 if (op2b.Pt.y.greaterThan(op2.Pt.y)
-                    || !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange)) {
+                    || !SlopesEqual3P(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange)) {
                     return false;
                 }
             }
@@ -3564,416 +3629,312 @@ export class Clipper extends ClipperBase {
             }
         }
     }
-      //----------------------------------------------------------------------
 
-    private void JoinCommonEdges()
-      {
-        for (int i = 0; i < m_Joins.Count; i++)
-        {
-          Join join = m_Joins[i];
+    private JoinCommonEdges():void {
+        for (let join of this.m_Joins) {
+            let outRec1 = this.GetOutRec(join.OutPt1.Idx);
+            let outRec2 = this.GetOutRec(join.OutPt2.Idx);
 
-          OutRec outRec1 = GetOutRec(join.OutPt1.Idx);
-          OutRec outRec2 = GetOutRec(join.OutPt2.Idx);
-
-          if (outRec1.Pts == null || outRec2.Pts == null) continue;
-          if (outRec1.IsOpen || outRec2.IsOpen) continue;
-
-          //get the polygon fragment with the correct hole state (FirstLeft)
-          //before calling JoinPoints() ...
-          OutRec holeStateRec;
-          if (outRec1 == outRec2) holeStateRec = outRec1;
-          else if (OutRec1RightOfOutRec2(outRec1, outRec2)) holeStateRec = outRec2;
-          else if (OutRec1RightOfOutRec2(outRec2, outRec1)) holeStateRec = outRec1;
-          else holeStateRec = GetLowermostRec(outRec1, outRec2);
-
-          if (!JoinPoints(join, outRec1, outRec2)) continue;
-
-          if (outRec1 == outRec2)
-          {
-            //instead of joining two polygons, we've just created a new one by
-            //splitting one polygon into two.
-            outRec1.Pts = join.OutPt1;
-            outRec1.BottomPt = null;
-            outRec2 = CreateOutRec();
-            outRec2.Pts = join.OutPt2;
-
-            //update all OutRec2.Pts Idx's ...
-            UpdateOutPtIdxs(outRec2);
-
-            if (Poly2ContainsPoly1(outRec2.Pts, outRec1.Pts))
-            {
-              //outRec1 contains outRec2 ...
-              outRec2.IsHole = !outRec1.IsHole;
-              outRec2.FirstLeft = outRec1;
-
-              if (m_UsingPolyTree) FixupFirstLefts2(outRec2, outRec1);
-
-              if ((outRec2.IsHole ^ ReverseSolution) == (Area(outRec2) > 0))
-                ReversePolyPtLinks(outRec2.Pts);
-
+            if (outRec1.Pts == null || outRec2.Pts == null) {
+                continue;
             }
-            else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
-            {
-              //outRec2 contains outRec1 ...
-              outRec2.IsHole = outRec1.IsHole;
-              outRec1.IsHole = !outRec2.IsHole;
-              outRec2.FirstLeft = outRec1.FirstLeft;
-              outRec1.FirstLeft = outRec2;
-
-              if (m_UsingPolyTree) FixupFirstLefts2(outRec1, outRec2);
-
-              if ((outRec1.IsHole ^ ReverseSolution) == (Area(outRec1) > 0))
-                ReversePolyPtLinks(outRec1.Pts);
+            if (outRec1.IsOpen || outRec2.IsOpen) {
+                continue;
             }
-            else
-            {
-              //the 2 polygons are completely separate ...
-              outRec2.IsHole = outRec1.IsHole;
-              outRec2.FirstLeft = outRec1.FirstLeft;
 
-              //fixup FirstLeft pointers that may need reassigning to OutRec2
-              if (m_UsingPolyTree) FixupFirstLefts1(outRec1, outRec2);
+            //get the polygon fragment with the correct hole state (FirstLeft)
+            //before calling JoinPoints() ...
+            let holeStateRec:OutRec;
+            if (outRec1 == outRec2) {
+                holeStateRec = outRec1;
+            } else if (OutRec1RightOfOutRec2(outRec1, outRec2)) {
+                holeStateRec = outRec2;
+            } else if (OutRec1RightOfOutRec2(outRec2, outRec1)) {
+                holeStateRec = outRec1;
+            } else {
+                holeStateRec = GetLowermostRec(outRec1, outRec2);
             }
-     
-          } else
-          {
-            //joined 2 polygons together ...
 
-            outRec2.Pts = null;
-            outRec2.BottomPt = null;
-            outRec2.Idx = outRec1.Idx;
+            if (!this.JoinPoints(join, outRec1, outRec2)) {
+                continue;
+            }
 
-            outRec1.IsHole = holeStateRec.IsHole;
-            if (holeStateRec == outRec2) 
-              outRec1.FirstLeft = outRec2.FirstLeft;
-            outRec2.FirstLeft = outRec1;
+            if (outRec1 == outRec2) {
+                //instead of joining two polygons, we've just created a new one by
+                //splitting one polygon into two.
+                outRec1.Pts = join.OutPt1;
+                outRec1.BottomPt = null;
+                outRec2 = this.CreateOutRec();
+                outRec2.Pts = join.OutPt2;
 
-            //fixup FirstLeft pointers that may need reassigning to OutRec1
-            if (m_UsingPolyTree) FixupFirstLefts3(outRec2, outRec1);
-          }
-        }
-      }
-      
+                //update all OutRec2.Pts Idx's ...
+                UpdateOutPtIdxs(outRec2);
 
-      private void UpdateOutPtIdxs(OutRec outrec)
-      {  
-        OutPt op = outrec.Pts;
-        do
-        {
-          op.Idx = outrec.Idx;
-          op = op.Prev;
-        }
-        while(op != outrec.Pts);
-      }
-      
+                if (Poly2ContainsPoly1(outRec2.Pts, outRec1.Pts)) {
+                    //outRec1 contains outRec2 ...
+                    outRec2.IsHole = !outRec1.IsHole;
+                    outRec2.FirstLeft = outRec1;
 
-      private void DoSimplePolygons()
-      {
-        int i = 0;
-        while (i < m_PolyOuts.Count) 
-        {
-          OutRec outrec = m_PolyOuts[i++];
-          OutPt op = outrec.Pts;
-          if (op == null || outrec.IsOpen) continue;
-          do //for each Pt in Polygon until duplicate found do ...
-          {
-            OutPt op2 = op.Next;
-            while (op2 != outrec.Pts) 
-            {
-              if ((op.Pt == op2.Pt) && op2.Next != op && op2.Prev != op) 
-              {
-                //split the polygon into two ...
-                OutPt op3 = op.Prev;
-                OutPt op4 = op2.Prev;
-                op.Prev = op4;
-                op4.Next = op;
-                op2.Prev = op3;
-                op3.Next = op2;
+                    if (this.m_UsingPolyTree) {
+                        this.FixupFirstLefts2(outRec2, outRec1);
+                    }
 
-                outrec.Pts = op;
-                OutRec outrec2 = CreateOutRec();
-                outrec2.Pts = op2;
-                UpdateOutPtIdxs(outrec2);
-                if (Poly2ContainsPoly1(outrec2.Pts, outrec.Pts))
-                {
-                  //OutRec2 is contained by OutRec1 ...
-                  outrec2.IsHole = !outrec.IsHole;
-                  outrec2.FirstLeft = outrec;
-                  if (m_UsingPolyTree) FixupFirstLefts2(outrec2, outrec);
+                    if (XOR(outRec2.IsHole, this.ReverseSolution) == (Area(outRec2) > 0)) {
+                        ReversePolyPtLinks(outRec2.Pts);
+                    }
+                } else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts)) {
+                    //outRec2 contains outRec1 ...
+                    outRec2.IsHole = outRec1.IsHole;
+                    outRec1.IsHole = !outRec2.IsHole;
+                    outRec2.FirstLeft = outRec1.FirstLeft;
+                    outRec1.FirstLeft = outRec2;
+
+                    if (this.m_UsingPolyTree) {
+                        this.FixupFirstLefts2(outRec1, outRec2);
+                    }
+
+                    if (XOR(outRec1.IsHole, this.ReverseSolution) == (Area(outRec1) > 0)) {
+                        ReversePolyPtLinks(outRec1.Pts);
+                    }
+                } else {
+                    //the 2 polygons are completely separate ...
+                    outRec2.IsHole = outRec1.IsHole;
+                    outRec2.FirstLeft = outRec1.FirstLeft;
+
+                    //fixup FirstLeft pointers that may need reassigning to OutRec2
+                    if (this.m_UsingPolyTree) {
+                        this.FixupFirstLefts1(outRec1, outRec2);
+                    }
                 }
-                else
-                  if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
-                {
-                  //OutRec1 is contained by OutRec2 ...
-                  outrec2.IsHole = outrec.IsHole;
-                  outrec.IsHole = !outrec2.IsHole;
-                  outrec2.FirstLeft = outrec.FirstLeft;
-                  outrec.FirstLeft = outrec2;
-                  if (m_UsingPolyTree) FixupFirstLefts2(outrec, outrec2);
+            } else {
+                //joined 2 polygons together ...
+
+                outRec2.Pts = null;
+                outRec2.BottomPt = null;
+                outRec2.Idx = outRec1.Idx;
+
+                outRec1.IsHole = holeStateRec.IsHole;
+                if (holeStateRec == outRec2) {
+                    outRec1.FirstLeft = outRec2.FirstLeft;
                 }
-                  else
-                {
-                  //the 2 polygons are separate ...
-                  outrec2.IsHole = outrec.IsHole;
-                  outrec2.FirstLeft = outrec.FirstLeft;
-                  if (m_UsingPolyTree) FixupFirstLefts1(outrec, outrec2);
+                outRec2.FirstLeft = outRec1;
+
+                //fixup FirstLeft pointers that may need reassigning to OutRec1
+                if (this.m_UsingPolyTree) {
+                    this.FixupFirstLefts3(outRec2, outRec1);
                 }
-                op2 = op; //ie get ready for the next iteration
-              }
-              op2 = op2.Next;
             }
-            op = op.Next;
-          }
-          while (op != outrec.Pts);
         }
-      }
-      
+    }
 
-      
-      // SimplifyPolygon functions ...
-      // Convert self-intersecting polygons into simple polygons
-      
+    private DoSimplePolygons():void {
+        let i = 0;
+        while (i < this.m_PolyOuts.length) {
+            let outrec = this.m_PolyOuts[i++];
+            let op = outrec.Pts;
+            if (op == null || outrec.IsOpen) {
+                continue;
+            }
+            do {//for each Pt in Polygon until duplicate found do ...
+                let op2 = op.Next;
+                while (op2 != outrec.Pts) {
+                    if (op.Pt.equals(op2.Pt) && op2.Next != op && op2.Prev != op) {
+                        //split the polygon into two ...
+                        let op3 = op.Prev;
+                        let op4 = op2.Prev;
+                        op.Prev = op4;
+                        op4.Next = op;
+                        op2.Prev = op3;
+                        op3.Next = op2;
 
-      public static Paths SimplifyPolygon(Path poly, 
-            PolyFillType fillType = PolyFillType.pftEvenOdd)
-      {
-          Paths result = new Paths();
-          Clipper c = new Clipper();
-          c.StrictlySimple = true;
-          c.AddPath(poly, PolyType.ptSubject, true);
-          c.Execute(ClipType.ctUnion, result, fillType, fillType);
-          return result;
-      }
-      
+                        outrec.Pts = op;
+                        let outrec2 = this.CreateOutRec();
+                        outrec2.Pts = op2;
+                        UpdateOutPtIdxs(outrec2);
+                        if (Poly2ContainsPoly1(outrec2.Pts, outrec.Pts)) {
+                            //OutRec2 is contained by OutRec1 ...
+                            outrec2.IsHole = !outrec.IsHole;
+                            outrec2.FirstLeft = outrec;
+                            if (this.m_UsingPolyTree) {
+                                this.FixupFirstLefts2(outrec2, outrec);
+                            }
+                        } else if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts)) {
+                            //OutRec1 is contained by OutRec2 ...
+                            outrec2.IsHole = outrec.IsHole;
+                            outrec.IsHole = !outrec2.IsHole;
+                            outrec2.FirstLeft = outrec.FirstLeft;
+                            outrec.FirstLeft = outrec2;
+                            if (this.m_UsingPolyTree) {
+                                this.FixupFirstLefts2(outrec, outrec2);
+                            }
+                        } else {
+                            //the 2 polygons are separate ...
+                            outrec2.IsHole = outrec.IsHole;
+                            outrec2.FirstLeft = outrec.FirstLeft;
+                            if (this.m_UsingPolyTree) {
+                                this.FixupFirstLefts1(outrec, outrec2);
+                            }
+                        }
+                        op2 = op; //ie get ready for the next iteration
+                    }
+                    op2 = op2.Next;
+                }
+                op = op.Next;
+            } while (op != outrec.Pts);
+        }
+    }
 
-      public static Paths SimplifyPolygons(Paths polys,
-          PolyFillType fillType = PolyFillType.pftEvenOdd)
-      {
-          Paths result = new Paths();
-          Clipper c = new Clipper();
-          c.StrictlySimple = true;
-          c.AddPaths(polys, PolyType.ptSubject, true);
-          c.Execute(ClipType.ctUnion, result, fillType, fillType);
-          return result;
-      }
-      
-
-      private static double DistanceSqrd(IntPoint pt1, IntPoint pt2)
-      {
-        double dx = ((double)pt1.X - pt2.X);
-        double dy = ((double)pt1.Y - pt2.Y);
-        return (dx*dx + dy*dy);
-      }
-      
-
-      private static double DistanceFromLineSqrd(IntPoint pt, IntPoint ln1, IntPoint ln2)
-      {
-        //The equation of a line in general form (Ax + By + C = 0)
-        //given 2 points (x¹,y¹) & (x²,y²) is ...
-        //(y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
-        //A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
-        //perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
-        //see http://en.wikipedia.org/wiki/Perpendicular_distance
-        double A = ln1.Y - ln2.Y;
-        double B = ln2.X - ln1.X;
-        double C = A * ln1.X  + B * ln1.Y;
-        C = A * pt.X + B * pt.Y - C;
-        return (C * C) / (A * A + B * B);
-      }
-      //---------------------------------------------------------------------------
-
-      private static bool SlopesNearCollinear(IntPoint pt1, 
-          IntPoint pt2, IntPoint pt3, double distSqrd)
-      {
-        //this function is more accurate when the point that's GEOMETRICALLY 
-        //between the other 2 points is the one that's tested for distance.  
-        //nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts                    
-        if (Math.Abs(pt1.X - pt2.X) > Math.Abs(pt1.Y - pt2.Y))
-	      {
-          if ((pt1.X > pt2.X) == (pt1.X < pt3.X))
-            return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
-          else if ((pt2.X > pt1.X) == (pt2.X < pt3.X))
-            return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
-		      else
-	          return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
-	      }
-	      else
-	      {
-          if ((pt1.Y > pt2.Y) == (pt1.Y < pt3.Y))
-            return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
-          else if ((pt2.Y > pt1.Y) == (pt2.Y < pt3.Y))
-            return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
-		      else
-            return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
-	      }
-      }
-      
-
-      private static bool PointsAreClose(IntPoint pt1, IntPoint pt2, double distSqrd)
-      {
-          double dx = (double)pt1.X - pt2.X;
-          double dy = (double)pt1.Y - pt2.Y;
-          return ((dx * dx) + (dy * dy) <= distSqrd);
-      }
-      
-
-      private static OutPt ExcludeOp(OutPt op)
-      {
-        OutPt result = op.Prev;
-        result.Next = op.Next;
-        op.Next.Prev = result;
-        result.Idx = 0;
+    // SimplifyPolygon functions ...
+    // Convert self-intersecting polygons into simple polygons
+    public static SimplifyPolygon(poly:Path, fillType:PolyFillType = PolyFillType.pftEvenOdd):Paths {
+        let result = new Array<Path>();
+        let c = new Clipper();
+        c.StrictlySimple = true;
+        c.AddPath(poly, PolyType.ptSubject, true);
+        c.ExecutePaths(ClipType.ctUnion, result, fillType, fillType);
         return result;
-      }
-      
+    }
 
-      public static Path CleanPolygon(Path path, double distance = 1.415)
-      {
+    public static SimplifyPolygons(polys:Paths, fillType:PolyFillType = PolyFillType.pftEvenOdd):Paths {
+        let result = new Array<Path>();
+        let c = new Clipper();
+        c.StrictlySimple = true;
+        c.AddPaths(polys, PolyType.ptSubject, true);
+        c.ExecutePaths(ClipType.ctUnion, result, fillType, fillType);
+        return result;
+    }
+
+    public static CleanPolygon(path:Path, distance:number = 1.415):Path {
         //distance = proximity in units/pixels below which vertices will be stripped. 
         //Default ~= sqrt(2) so when adjacent vertices or semi-adjacent vertices have 
         //both x & y coords within 1 unit, then the second vertex will be stripped.
 
-        int cnt = path.Count;
-
-        if (cnt == 0) return new Path();
-
-        OutPt [] outPts = new OutPt[cnt];
-        for (int i = 0; i < cnt; ++i) outPts[i] = new OutPt();
-
-        for (int i = 0; i < cnt; ++i)
-        {
-          outPts[i].Pt = path[i];
-          outPts[i].Next = outPts[(i + 1) % cnt];
-          outPts[i].Next.Prev = outPts[i];
-          outPts[i].Idx = 0;
+        let cnt = path.length;
+        let result = new Array<IntPoint>();
+        
+        if (cnt == 0) {
+            return result;
         }
 
-        double distSqrd = distance * distance;
-        OutPt op = outPts[0];
-        while (op.Idx == 0 && op.Next != op.Prev)
-        {
-          if (PointsAreClose(op.Pt, op.Prev.Pt, distSqrd))
-          {
-            op = ExcludeOp(op);
-            cnt--;
-          }
-          else if (PointsAreClose(op.Prev.Pt, op.Next.Pt, distSqrd))
-          {
-            ExcludeOp(op.Next);
-            op = ExcludeOp(op);
-            cnt -= 2;
-          }
-          else if (SlopesNearCollinear(op.Prev.Pt, op.Pt, op.Next.Pt, distSqrd))
-          {
-            op = ExcludeOp(op);
-            cnt--;
-          }
-          else
-          {
-            op.Idx = 1;
-            op = op.Next;
-          }
+        let outPts = new Array<OutPt>(cnt);
+        for (let i = 0; i < cnt; ++i) {
+            outPts[i] = new OutPt();
         }
 
-        if (cnt < 3) cnt = 0;
-        Path result = new Path(cnt);
-        for (int i = 0; i < cnt; ++i)
-        {
-          result.Add(op.Pt);
+        for (let i = 0; i < cnt; ++i) {
+            outPts[i].Pt = path[i];
+            outPts[i].Next = outPts[(i + 1) % cnt];
+            outPts[i].Next.Prev = outPts[i];
+            outPts[i].Idx = 0;
+        }
+
+        let distSqrd = distance * distance;
+        let op = outPts[0];
+        while (op.Idx == 0 && op.Next != op.Prev) {
+            if (PointsAreClose(op.Pt, op.Prev.Pt, distSqrd)) {
+                op = ExcludeOp(op);
+                cnt--;
+            } else if (PointsAreClose(op.Prev.Pt, op.Next.Pt, distSqrd)) {
+                ExcludeOp(op.Next);
+                op = ExcludeOp(op);
+                cnt -= 2;
+            } else if (SlopesNearCollinear(op.Prev.Pt, op.Pt, op.Next.Pt, distSqrd)) {
+                op = ExcludeOp(op);
+                cnt--;
+            } else {
+                op.Idx = 1;
+                op = op.Next;
+            }
+        }
+
+        if (cnt < 3) {
+            cnt = 0;
+        }
+        for (let i = 0; i < cnt; ++i) {
+          result.push(op.Pt);
           op = op.Next;
         }
         outPts = null;
         return result;
-      }
-      
+    }
 
-      public static Paths CleanPolygons(Paths polys,
-          double distance = 1.415)
-      {
-        Paths result = new Paths(polys.Count);
-        for (int i = 0; i < polys.Count; i++)
-          result.Add(CleanPolygon(polys[i], distance));
-        return result;
-      }
-      
-
-      internal static Paths Minkowski(Path pattern, Path path, bool IsSum, bool IsClosed)
-      {
-        int delta = (IsClosed ? 1 : 0);
-        int polyCnt = pattern.Count;
-        int pathCnt = path.Count;
-        Paths result = new Paths(pathCnt);
-        if (IsSum)
-          for (int i = 0; i < pathCnt; i++)
-          {
-            Path p = new Path(polyCnt);
-            foreach (IntPoint ip in pattern)
-              p.Add(new IntPoint(path[i].X + ip.X, path[i].Y + ip.Y));
-            result.Add(p);
-          }
-        else
-          for (int i = 0; i < pathCnt; i++)
-          {
-            Path p = new Path(polyCnt);
-            foreach (IntPoint ip in pattern)
-              p.Add(new IntPoint(path[i].X - ip.X, path[i].Y - ip.Y));
-            result.Add(p);
-          }
-
-        Paths quads = new Paths((pathCnt + delta) * (polyCnt + 1));
-        for (int i = 0; i < pathCnt - 1 + delta; i++)
-          for (int j = 0; j < polyCnt; j++)
-          {
-            Path quad = new Path(4);
-            quad.Add(result[i % pathCnt][j % polyCnt]);
-            quad.Add(result[(i + 1) % pathCnt][j % polyCnt]);
-            quad.Add(result[(i + 1) % pathCnt][(j + 1) % polyCnt]);
-            quad.Add(result[i % pathCnt][(j + 1) % polyCnt]);
-            if (!Orientation(quad)) quad.Reverse();
-            quads.Add(quad);
-          }
-        return quads;
-      }
-      
-
-      public static Paths MinkowskiSum(Path pattern, Path path, bool pathIsClosed)
-      {
-        Paths paths = Minkowski(pattern, path, true, pathIsClosed);
-        Clipper c = new Clipper();
-        c.AddPaths(paths, PolyType.ptSubject, true);
-        c.Execute(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
-        return paths;
-      }
-      
-
-      private static Path TranslatePath(Path path, IntPoint delta) 
-      {
-        Path outPath = new Path(path.Count);
-        for (int i = 0; i < path.Count; i++)
-          outPath.Add(new IntPoint(path[i].X + delta.X, path[i].Y + delta.Y));
-        return outPath;
-      }
-      
-
-      public static Paths MinkowskiSum(Path pattern, Paths paths, bool pathIsClosed)
-      {
-        Paths solution = new Paths();
-        Clipper c = new Clipper();
-        for (int i = 0; i < paths.Count; ++i)
-        {
-          Paths tmp = Minkowski(pattern, paths[i], true, pathIsClosed);
-          c.AddPaths(tmp, PolyType.ptSubject, true);
-          if (pathIsClosed)
-          {
-            Path path = TranslatePath(paths[i], pattern[0]);
-            c.AddPath(path, PolyType.ptClip, true);
-          }
+    public static CleanPolygons(polys:Paths, distance:number = 1.415):Paths {
+        let result = new Array<Path>();
+        for (let poly of polys) {
+            result.push(Clipper.CleanPolygon(poly, distance));
         }
-        c.Execute(ClipType.ctUnion, solution, 
-          PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+        return result;
+    }
+
+    static Minkowski(pattern:Path, path:Path, IsSum:boolean, IsClosed:boolean): Paths {
+        let delta = (IsClosed ? 1 : 0);
+        let polyCnt = pattern.length;
+        let pathCnt = path.length;
+        let result = new Array<Path>(); //(pathCnt);
+        if (IsSum) {
+            for (let i = 0; i < pathCnt; i++) {
+                let p = new Array<IntPoint>();
+                for (let ip of pattern) {
+                    p.push(new IntPoint(path[i].x.add(ip.x), path[i].y.add(ip.y)));
+                }
+                result.push(p);
+            }
+        } else {
+            for (let i = 0; i < pathCnt; i++) {
+                let p = new Array<IntPoint>(); //(polyCnt);
+                for (let ip of pattern) {
+                    p.push(new IntPoint(path[i].x.sub(ip.x), path[i].y.sub(ip.y)));
+                }
+                result.push(p);
+            }
+        }
+        let quads = new Array<Path>();//((pathCnt + delta) * (polyCnt + 1));
+        for (let i = 0; i < pathCnt - 1 + delta; i++) {
+            for (let j = 0; j < polyCnt; j++) {
+                let quad = new Array<IntPoint>(4);
+                quad[0] = result[i % pathCnt][j % polyCnt];
+                quad[1] = result[(i + 1) % pathCnt][j % polyCnt];
+                quad[2] = result[(i + 1) % pathCnt][(j + 1) % polyCnt];
+                quad[3] = result[i % pathCnt][(j + 1) % polyCnt];
+                if (!Orientation(quad)) {
+                    quad.reverse();
+                }
+                quads.push(quad);
+            }
+        }
+        return quads;
+    }
+
+    public static MinkowskiSumPath(pattern:Path, path:Path, pathIsClosed:boolean):Paths {
+        let paths = Clipper.Minkowski(pattern, path, true, pathIsClosed);
+        let c = new Clipper();
+        c.AddPaths(paths, PolyType.ptSubject, true);
+        c.ExecutePaths(ClipType.ctUnion, paths, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
+        return paths;
+    }
+
+    private static TranslatePath(path:Path, delta:IntPoint):Path {
+        let outPath = new Array<IntPoint>(path.length);
+        for (let i = 0; i < path.length; i++) {
+            outPath[i] = new IntPoint(path[i].x.add(delta.x), path[i].y.add(delta.y));
+        }
+        return outPath;
+    }
+
+    public static MinkowskiSumPaths(pattern:Path, paths:Paths, pathIsClosed:boolean):Paths {
+        let solution = new Array<Path>();
+        let c = new Clipper();
+        for (let i = 0; i < paths.length; ++i) {
+            let tmp = Clipper.Minkowski(pattern, paths[i], true, pathIsClosed);
+            c.AddPaths(tmp, PolyType.ptSubject, true);
+            if (pathIsClosed) {
+                let path = Clipper.TranslatePath(paths[i], pattern[0]);
+                c.AddPath(path, PolyType.ptClip, true);
+            }
+        }
+        c.ExecutePaths(ClipType.ctUnion, solution, PolyFillType.pftNonZero, PolyFillType.pftNonZero);
         return solution;
-      }
-      
+    }
 
       public static Paths MinkowskiDiff(Path poly1, Path poly2)
       {

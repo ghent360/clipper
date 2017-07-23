@@ -172,6 +172,13 @@ export class Int64 {
         return LongIntImpl.function64_64_32(this, other, "ges64") != 0;
     }
     
+    public abs():Int64 {
+        if (this.isNegative()) {
+            return this.neg();
+        }
+        return this;
+    }
+
     public static fromNumber(value:number):Int64 {
         if (isNaN(value)) {
             return new Int64(0, 0);
@@ -561,6 +568,13 @@ export class Int128 {
             + (this.d1 >>> 0) * TwoPow32
             + (this.d2 >>> 0) * TwoPow64
             + (this.d3 >>> 0) * TwoPow96;
+    }
+
+    public abs():Int128 {
+        if (this.isNegative()) {
+            return this.neg();
+        }
+        return this;
     }
 
     public static fromInt64(v:Int64):Int128 {
