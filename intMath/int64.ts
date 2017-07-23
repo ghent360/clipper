@@ -206,6 +206,10 @@ export class Int64 {
         }
     }
 
+    public static fromRoundNumber(value:number):Int64 {
+        return Int64.fromNumber(Math.round(value));
+    }
+
     public static fromInt(value:number):Int64 {
         let intValue = value | 0;
         if (!(intValue === value)) {

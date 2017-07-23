@@ -1,3 +1,45 @@
+/*******************************************************************************
+*                                                                              *
+* This is a translation of the C# Clipper library.                             *
+* Translation copyright(c) 2017 Venelin Efremov                                *
+*                                                                              *
+* The license and copyright from the original code follows                     *
+*                                                                              *
+*******************************************************************************/
+
+/*******************************************************************************
+*                                                                              *
+* Author    :  Angus Johnson                                                   *
+* Version   :  6.4.2                                                           *
+* Date      :  27 February 2017                                                *
+* Website   :  http://www.angusj.com                                           *
+* Copyright :  Angus Johnson 2010-2017                                         *
+*                                                                              *
+* License:                                                                     *
+* Use, modification & distribution is subject to Boost Software License Ver 1. *
+* http://www.boost.org/LICENSE_1_0.txt                                         *
+*                                                                              *
+* Attributions:                                                                *
+* The code in this library is an extension of Bala Vatti's clipping algorithm: *
+* "A generic solution to polygon clipping"                                     *
+* Communications of the ACM, Vol 35, Issue 7 (July 1992) pp 56-63.             *
+* http://portal.acm.org/citation.cfm?id=129906                                 *
+*                                                                              *
+* Computer graphics and geometric modeling: implementation and algorithms      *
+* By Max K. Agoston                                                            *
+* Springer; 1 edition (January 4, 2005)                                        *
+* http://books.google.com/books?q=vatti+clipping+agoston                       *
+*                                                                              *
+* See also:                                                                    *
+* "Polygon Offsetting by Computing Winding Numbers"                            *
+* Paper no. DETC2005-85513 pp. 565-575                                         *
+* ASME 2005 International Design Engineering Technical Conferences             *
+* and Computers and Information in Engineering Conference (IDETC/CIE2005)      *
+* September 24-28, 2005 , Long Beach, California, USA                          *
+* http://www.me.berkeley.edu/~mcmains/pubs/DAC05OffsetPolygon.pdf              *
+*                                                                              *
+*******************************************************************************/
+
 import {Int64, Int128} from "./intMath/int64";
 
 type Path=Array<IntPoint>;
@@ -478,7 +520,7 @@ function TopX(edge:TEdge, currentY:Int64):Int64 {
     if (currentY.equals(edge.Top.y)) {
         return edge.Top.x;
     }
-    return edge.Bot.x.add(Int64.fromNumber(Math.round(edge.Dx * currentY.sub(edge.Bot.y).toNumber())));
+    return edge.Bot.x.add(Int64.fromRoundNumber(edge.Dx * currentY.sub(edge.Bot.y).toNumber()));
 }
 
 function E2InsertsBeforeE1(e1:TEdge, e2:TEdge):boolean {
@@ -694,10 +736,6 @@ function GetMaximaPairEx(e:TEdge):TEdge {
     return result;
 }
 
-function Round(value:number):Int64 {
-    return Int64.fromNumber(Math.round(value));
-}
-
 function IntersectPoint(edge1:TEdge, edge2:TEdge):IntPoint {
     let b1:number;
     let b2:number;
@@ -718,7 +756,7 @@ function IntersectPoint(edge1:TEdge, edge2:TEdge):IntPoint {
             ipy = edge2.Bot.y;
         } else {
             b2 = edge2.Bot.y.toNumber() - edge2.Bot.x.toNumber() / edge2.Dx;
-            ipy = Round(ipx.toNumber() / edge2.Dx + b2);
+            ipy = Int64.fromRoundNumber(ipx.toNumber() / edge2.Dx + b2);
         }
     } else if (edge2.Delta.x.isZero()) {
         ipx = edge2.Bot.x;
@@ -726,17 +764,17 @@ function IntersectPoint(edge1:TEdge, edge2:TEdge):IntPoint {
             ipy = edge1.Bot.y;
         } else {
             b1 = edge1.Bot.y.toNumber() - edge1.Bot.x.toNumber() / edge1.Dx;
-            ipy = Round(ipx.toNumber() / edge1.Dx + b1);
+            ipy = Int64.fromRoundNumber(ipx.toNumber() / edge1.Dx + b1);
         }
     } else {
         b1 = edge1.Bot.x.toNumber() - edge1.Bot.y.toNumber() * edge1.Dx;
         b2 = edge2.Bot.x.toNumber() - edge2.Bot.y.toNumber() * edge2.Dx;
         let q = (b2 - b1) / (edge1.Dx - edge2.Dx);
-        ipy = Round(q);
+        ipy = Int64.fromRoundNumber(q);
         if (Math.abs(edge1.Dx) < Math.abs(edge2.Dx)) {
-            ipx = Round(edge1.Dx * q + b1);
+            ipx = Int64.fromRoundNumber(edge1.Dx * q + b1);
         } else {
-            ipx = Round(edge2.Dx * q + b2);
+            ipx = Int64.fromRoundNumber(edge2.Dx * q + b2);
         }
     }
 
@@ -4183,8 +4221,8 @@ export class ClipperOffset {
                     for (let j = 1; j <= steps; j++) {
                         this.m_destPoly.push(
                             new IntPoint(
-                                this.m_srcPoly[0].x.add(Int64.fromNumber(Math.round(X * delta))),
-                                this.m_srcPoly[0].y.add(Int64.fromNumber(Math.round(Y * delta)))));
+                                this.m_srcPoly[0].x.add(Int64.fromRoundNumber(X * delta)),
+                                this.m_srcPoly[0].y.add(Int64.fromRoundNumber(Y * delta))));
                         let X2 = X;
                         X = X * this.m_cos - this.m_sin * Y;
                         Y = X2 * this.m_sin + Y * this.m_cos;
@@ -4194,8 +4232,8 @@ export class ClipperOffset {
                     for (let j = 0; j < 4; ++j) {
                         this.m_destPoly.push(
                             new IntPoint(
-                            this.m_srcPoly[0].x.add(Int64.fromNumber(Math.round(X * delta))),
-                                this.m_srcPoly[0].y.add(Int64.fromNumber(Math.round(Y * delta)))));
+                            this.m_srcPoly[0].x.add(Int64.fromRoundNumber(X * delta)),
+                                this.m_srcPoly[0].y.add(Int64.fromRoundNumber(Y * delta))));
                         if (X < 0) {
                             X = 1;
                         } else if (Y < 0) {
@@ -4259,12 +4297,12 @@ export class ClipperOffset {
                 if (node.endType == EndType.etOpenButt) {
                     let j = len - 1;
                     pt1 = new IntPoint(
-                        this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_normals[j].x * delta))),
-                        this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_normals[j].y * delta))));
+                        this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_normals[j].x * delta)),
+                        this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_normals[j].y * delta)));
                     this.m_destPoly.push(pt1);
                     pt1 = new IntPoint(
-                        this.m_srcPoly[j].x.sub(Int64.fromNumber(Math.round(this.m_normals[j].x * delta))),
-                        this.m_srcPoly[j].y.sub(Int64.fromNumber(Math.round(this.m_normals[j].y * delta))));
+                        this.m_srcPoly[j].x.sub(Int64.fromRoundNumber(this.m_normals[j].x * delta)),
+                        this.m_srcPoly[j].y.sub(Int64.fromRoundNumber(this.m_normals[j].y * delta)));
                     this.m_destPoly.push(pt1);
                 } else {
                     let j = len - 1;
@@ -4292,12 +4330,12 @@ export class ClipperOffset {
 
                 if (node.endType == EndType.etOpenButt) {
                     pt1 = new IntPoint(
-                        this.m_srcPoly[0].x.sub(Int64.fromNumber(Math.round(this.m_normals[0].x * delta))),
-                        this.m_srcPoly[0].y.sub(Int64.fromNumber(Math.round(this.m_normals[0].y * delta))));
+                        this.m_srcPoly[0].x.sub(Int64.fromRoundNumber(this.m_normals[0].x * delta)),
+                        this.m_srcPoly[0].y.sub(Int64.fromRoundNumber(this.m_normals[0].y * delta)));
                     this.m_destPoly.push(pt1);
                     pt1 = new IntPoint(
-                        this.m_srcPoly[0].x.add(Int64.fromNumber(Math.round(this.m_normals[0].x * delta))),
-                        this.m_srcPoly[0].y.add(Int64.fromNumber(Math.round(this.m_normals[0].y * delta))));
+                        this.m_srcPoly[0].x.add(Int64.fromRoundNumber(this.m_normals[0].x * delta)),
+                        this.m_srcPoly[0].y.add(Int64.fromRoundNumber(this.m_normals[0].y * delta)));
                     this.m_destPoly.push(pt1);
                 } else {
                     k = 1;
@@ -4313,7 +4351,14 @@ export class ClipperOffset {
         }
     }
 
-    public ExecutePaths(solution:Paths, delta:number):void {
+    public Execute(solution:Paths|PolyTree, delta:number):void {
+        if (solution instanceof Array) {
+            return this.ExecutePaths(solution, delta);
+        }
+        return this.ExecutePolyTree(solution, delta);
+    }
+
+    private ExecutePaths(solution:Paths, delta:number):void {
         solution.length = 0;
         this.FixOrientations();
         this.DoOffset(delta);
@@ -4341,9 +4386,8 @@ export class ClipperOffset {
             }
         }
     }
-    
 
-    public ExecutePolyTree(solution:PolyTree, delta:number):void {
+    private ExecutePolyTree(solution:PolyTree, delta:number):void {
         solution.clear();
         this.FixOrientations();
         this.DoOffset(delta);
@@ -4382,7 +4426,7 @@ export class ClipperOffset {
         }
     }
 
-    OffsetPoint(j:number, k:number, jointype:JoinType):number {
+    private OffsetPoint(j:number, k:number, jointype:JoinType):number {
         //cross product ...
         this.m_sinA = this.m_normals[k].x * this.m_normals[j].y - this.m_normals[j].x * this.m_normals[k].y;
 
@@ -4392,8 +4436,8 @@ export class ClipperOffset {
             if (cosA > 0) {// angle ==> 0 degrees
                 this.m_destPoly.push(
                     new IntPoint(
-                        this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_normals[k].x * this.m_delta))),
-                        this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_normals[k].y * this.m_delta)))));
+                        this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_normals[k].x * this.m_delta)),
+                        this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_normals[k].y * this.m_delta))));
                 return k;
             }
             //else angle ==> 180 degrees   
@@ -4406,13 +4450,13 @@ export class ClipperOffset {
         if (this.m_sinA * this.m_delta < 0) {
             this.m_destPoly.push(
                 new IntPoint(
-                    this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_normals[k].x * this.m_delta))),
-                    this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_normals[k].y * this.m_delta)))));
+                    this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_normals[k].x * this.m_delta)),
+                    this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_normals[k].y * this.m_delta))));
             this.m_destPoly.push(this.m_srcPoly[j]);
             this.m_destPoly.push(
                 new IntPoint(
-                    this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_normals[j].x * this.m_delta))),
-                    this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_normals[j].y * this.m_delta)))));
+                    this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_normals[j].x * this.m_delta)),
+                    this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_normals[j].y * this.m_delta))));
         } else {
             switch (jointype) {
             case JoinType.jtMiter:
@@ -4435,7 +4479,7 @@ export class ClipperOffset {
         return k;
     }
 
-    DoSquare(j:number, k:number):void {
+    private DoSquare(j:number, k:number):void {
       let dx = Math.tan(
           Math.atan2(
               this.m_sinA,
@@ -4443,23 +4487,23 @@ export class ClipperOffset {
               / 4);
       this.m_destPoly.push(
           new IntPoint(
-              this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_delta * (this.m_normals[k].x - this.m_normals[k].y * dx)))),
-              this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_delta * (this.m_normals[k].y - this.m_normals[k].x * dx))))));
+              this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_delta * (this.m_normals[k].x - this.m_normals[k].y * dx))),
+              this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_delta * (this.m_normals[k].y - this.m_normals[k].x * dx)))));
       this.m_destPoly.push(
           new IntPoint(
-              this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_delta * (this.m_normals[j].x - this.m_normals[j].y * dx)))),
-              this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_delta * (this.m_normals[j].y - this.m_normals[j].x * dx))))));
+              this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_delta * (this.m_normals[j].x - this.m_normals[j].y * dx))),
+              this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_delta * (this.m_normals[j].y - this.m_normals[j].x * dx)))));
     }
 
-    DoMiter(j:number, k:number, r:number):void {
+    private DoMiter(j:number, k:number, r:number):void {
       let q = this.m_delta / r;
       this.m_destPoly.push(
           new IntPoint(
-              this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round((this.m_normals[k].x + this.m_normals[j].x) * q))),
-              this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round((this.m_normals[k].y + this.m_normals[j].y) * q)))));
+              this.m_srcPoly[j].x.add(Int64.fromRoundNumber((this.m_normals[k].x + this.m_normals[j].x) * q)),
+              this.m_srcPoly[j].y.add(Int64.fromRoundNumber((this.m_normals[k].y + this.m_normals[j].y) * q))));
     }
 
-    DoRound(j:number, k:number):void {
+    private DoRound(j:number, k:number):void {
         let a = Math.atan2(
             this.m_sinA,
             this.m_normals[k].x * this.m_normals[j].x + this.m_normals[k].y * this.m_normals[j].y);
@@ -4471,15 +4515,15 @@ export class ClipperOffset {
         for (let i = 0; i < steps; ++i) {
             this.m_destPoly.push(
                 new IntPoint(
-                    this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(X * this.m_delta))),
-                    this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(Y * this.m_delta)))));
+                    this.m_srcPoly[j].x.add(Int64.fromRoundNumber(X * this.m_delta)),
+                    this.m_srcPoly[j].y.add(Int64.fromRoundNumber(Y * this.m_delta))));
             X2 = X;
             X = X * this.m_cos - this.m_sin * Y;
             Y = X2 * this.m_sin + Y * this.m_cos;
         }
         this.m_destPoly.push(
             new IntPoint(
-                this.m_srcPoly[j].x.add(Int64.fromNumber(Math.round(this.m_normals[j].x * this.m_delta))),
-                this.m_srcPoly[j].y.add(Int64.fromNumber(Math.round(this.m_normals[j].y * this.m_delta)))));
+                this.m_srcPoly[j].x.add(Int64.fromRoundNumber(this.m_normals[j].x * this.m_delta)),
+                this.m_srcPoly[j].y.add(Int64.fromRoundNumber(this.m_normals[j].y * this.m_delta))));
     }
 } // end ClipperOffset
