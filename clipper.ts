@@ -685,6 +685,86 @@ function GetMaximaPairEx(e:TEdge):TEdge {
     return result;
 }
 
+function Round(value:number):Int64 {
+    return Int64.fromNumber(Math.round(value));
+}
+
+function IntersectPoint(edge1:TEdge, edge2:TEdge):IntPoint {
+    let ip = new IntPoint();
+    let b1:number;
+    let b2:number;
+    //nb: with very large coordinate values, it's possible for SlopesEqual() to 
+    //return false but for the edge.Dx value be equal due to double precision rounding.
+    if (edge1.Dx == edge2.Dx) {
+        ip.y = edge1.Curr.y;
+        ip.x = TopX(edge1, ip.y);
+        return ip;
+    }
+
+    if (edge1.Delta.x.isZero()) {
+        ip.x = edge1.Bot.x;
+        if (IsHorizontal(edge2)) {
+            ip.y = edge2.Bot.y;
+        } else {
+            b2 = edge2.Bot.y.toNumber() - edge2.Bot.x.toNumber() / edge2.Dx;
+            ip.y = Round(ip.x.toNumber() / edge2.Dx + b2);
+        }
+    } else if (edge2.Delta.x.isZero()) {
+        ip.x = edge2.Bot.x;
+        if (IsHorizontal(edge1)) {
+            ip.y = edge1.Bot.y;
+        } else {
+            b1 = edge1.Bot.y.toNumber() - edge1.Bot.x.toNumber() / edge1.Dx;
+            ip.y = Round(ip.x.toNumber() / edge1.Dx + b1);
+        }
+    } else {
+        b1 = edge1.Bot.x.toNumber() - edge1.Bot.y.toNumber() * edge1.Dx;
+        b2 = edge2.Bot.x.toNumber() - edge2.Bot.y.toNumber() * edge2.Dx;
+        let q = (b2 - b1) / (edge1.Dx - edge2.Dx);
+        ip.y = Round(q);
+        if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx)) {
+            ip.x = Round(edge1.Dx * q + b1);
+        } else {
+            ip.x = Round(edge2.Dx * q + b2);
+        }
+    }
+
+    if (ip.y.lessThan(edge1.Top.y) || ip.y.lessThan(edge2.Top.y)) {
+        if (edge1.Top.y.greaterThan(edge2.Top.y)) {
+            ip.y = edge1.Top.y;
+        } else {
+            ip.y = edge2.Top.y;
+        }
+        if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx)) {
+            ip.x = TopX(edge1, ip.y);
+        } else {
+            ip.x = TopX(edge2, ip.y);
+        }
+    }
+    //finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
+    if (ip.y.greaterThan(edge1.Curr.y)) {
+        ip.y = edge1.Curr.y;
+        //better to use the more vertical edge to derive X ...
+        if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx)) {
+            ip.x = TopX(edge2, ip.y);
+        } else {
+            ip.x = TopX(edge1, ip.y);
+        }
+    }
+    return ip;
+}
+
+function EdgesAdjacent(inode:IntersectNode):boolean {
+    return (inode.Edge1.NextInSEL == inode.Edge2) ||
+        (inode.Edge1.PrevInSEL == inode.Edge2);
+}
+
+function IntersectNodeSort(node1:IntersectNode, node2:IntersectNode):number {
+    //the following typecast is safe because the differences in Pt.Y will
+    //be limited to the height of the scanbeam.
+    return node2.Pt.y.sub(node1.Pt.y).toInt(); 
+}
+
 class ClipperBase {
     m_MinimaList:LocalMinima;
     m_CurrentLM:LocalMinima;
@@ -2573,306 +2653,193 @@ export class Clipper extends ClipperBase {
         this.m_SortedEdges = null;
         return true;
     }
-      
 
-      private void BuildIntersectList(cInt topY)
-      {
-        if ( m_ActiveEdges == null ) return;
+    private BuildIntersectList(topY:Int64):void {
+        if (this.m_ActiveEdges == null) {
+            return;
+        }
 
         //prepare for sorting ...
-        TEdge e = m_ActiveEdges;
-        m_SortedEdges = e;
-        while( e != null )
-        {
-          e.PrevInSEL = e.PrevInAEL;
-          e.NextInSEL = e.NextInAEL;
-          e.Curr.X = TopX( e, topY );
-          e = e.NextInAEL;
+        let e = this.m_ActiveEdges;
+        this.m_SortedEdges = e;
+        while (e != null) {
+            e.PrevInSEL = e.PrevInAEL;
+            e.NextInSEL = e.NextInAEL;
+            e.Curr.x = TopX(e, topY);
+            e = e.NextInAEL;
         }
 
         //bubblesort ...
-        bool isModified = true;
-        while( isModified && m_SortedEdges != null )
-        {
-          isModified = false;
-          e = m_SortedEdges;
-          while( e.NextInSEL != null )
-          {
-            TEdge eNext = e.NextInSEL;
-            IntPoint pt;
-            if (e.Curr.X > eNext.Curr.X)
-            {
-                IntersectPoint(e, eNext, out pt);
-                if (pt.Y < topY)
-                  pt = new IntPoint(TopX(e, topY), topY);
-                IntersectNode newNode = new IntersectNode();
-                newNode.Edge1 = e;
-                newNode.Edge2 = eNext;
-                newNode.Pt = pt;
-                m_IntersectList.Add(newNode);
+        let isModified = true;
+        while (isModified && this.m_SortedEdges != null) {
+            isModified = false;
+            e = this,m_SortedEdges;
+            while (e.NextInSEL != null) {
+                let eNext = e.NextInSEL;
+                let pt:IntPoint;
+                if (e.Curr.x.greaterThan(eNext.Curr.x)) {
+                    pt = IntersectPoint(e, eNext);
+                    if (pt.y.lessThan(topY)) {
+                        pt = new IntPoint(TopX(e, topY), topY);
+                    }
+                    let newNode = new IntersectNode();
+                    newNode.Edge1 = e;
+                    newNode.Edge2 = eNext;
+                    newNode.Pt = pt;
+                    this.m_IntersectList.push(newNode);
 
-                SwapPositionsInSEL(e, eNext);
-                isModified = true;
+                    this.SwapPositionsInSEL(e, eNext);
+                    isModified = true;
+                } else {
+                    e = eNext;
+                }
             }
-            else
-              e = eNext;
-          }
-          if( e.PrevInSEL != null ) e.PrevInSEL.NextInSEL = null;
-          else break;
+            if (e.PrevInSEL != null) {
+                e.PrevInSEL.NextInSEL = null;
+            } else {
+                break;
+            }
         }
-        m_SortedEdges = null;
-      }
-      
+        this.m_SortedEdges = null;
+    }
 
-      private bool EdgesAdjacent(IntersectNode inode)
-      {
-        return (inode.Edge1.NextInSEL == inode.Edge2) ||
-          (inode.Edge1.PrevInSEL == inode.Edge2);
-      }
-      
-
-      private static int IntersectNodeSort(IntersectNode node1, IntersectNode node2)
-      {
-        //the following typecast is safe because the differences in Pt.Y will
-        //be limited to the height of the scanbeam.
-        return (int)(node2.Pt.Y - node1.Pt.Y); 
-      }
-      
-
-      private bool FixupIntersectionOrder()
-      {
+    private FixupIntersectionOrder():boolean {
         //pre-condition: intersections are sorted bottom-most first.
         //Now it's crucial that intersections are made only between adjacent edges,
         //so to ensure this the order of intersections may need adjusting ...
-        m_IntersectList.Sort(m_IntersectNodeComparer);
+        this.m_IntersectList.sort(MyIntersectNodeSort);
 
-        CopyAELToSEL();
-        int cnt = m_IntersectList.Count;
-        for (int i = 0; i < cnt; i++)
-        {
-          if (!EdgesAdjacent(m_IntersectList[i]))
-          {
-            int j = i + 1;
-            while (j < cnt && !EdgesAdjacent(m_IntersectList[j])) j++;
-            if (j == cnt) return false;
+        this.CopyAELToSEL();
+        let cnt = this.m_IntersectList.length;
+        for (let i = 0; i < cnt; i++) {
+            if (!EdgesAdjacent(this.m_IntersectList[i])) {
+                let j = i + 1;
+                while (j < cnt && !EdgesAdjacent(this.m_IntersectList[j])) {
+                    j++;
+                }
+                if (j == cnt) {
+                    return false;
+                }
 
-            IntersectNode tmp = m_IntersectList[i];
-            m_IntersectList[i] = m_IntersectList[j];
-            m_IntersectList[j] = tmp;
-
-          }
-          SwapPositionsInSEL(m_IntersectList[i].Edge1, m_IntersectList[i].Edge2);
-        }
-          return true;
-      }
-      
-
-      private void ProcessIntersectList()
-      {
-        for (int i = 0; i < m_IntersectList.Count; i++)
-        {
-          IntersectNode iNode = m_IntersectList[i];
-          {
-            IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
-            SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
-          }
-        }
-        m_IntersectList.Clear();
-      }
-      
-
-      internal static cInt Round(double value)
-      {
-          return value < 0 ? (cInt)(value - 0.5) : (cInt)(value + 0.5);
-      }
-      
-      
-
-
-      private void IntersectPoint(TEdge edge1, TEdge edge2, out IntPoint ip)
-      {
-        ip = new IntPoint();
-        double b1, b2;
-        //nb: with very large coordinate values, it's possible for SlopesEqual() to 
-        //return false but for the edge.Dx value be equal due to double precision rounding.
-        if (edge1.Dx == edge2.Dx)
-        {
-          ip.Y = edge1.Curr.Y;
-          ip.X = TopX(edge1, ip.Y);
-          return;
-        }
-
-        if (edge1.Delta.X == 0)
-        {
-            ip.X = edge1.Bot.X;
-            if (IsHorizontal(edge2))
-            {
-                ip.Y = edge2.Bot.Y;
+                let tmp = this.m_IntersectList[i];
+                this.m_IntersectList[i] = this.m_IntersectList[j];
+                this.m_IntersectList[j] = tmp;
             }
-            else
-            {
-                b2 = edge2.Bot.Y - (edge2.Bot.X / edge2.Dx);
-                ip.Y = Round(ip.X / edge2.Dx + b2);
-            }
+            this.SwapPositionsInSEL(m_IntersectList[i].Edge1, m_IntersectList[i].Edge2);
         }
-        else if (edge2.Delta.X == 0)
-        {
-            ip.X = edge2.Bot.X;
-            if (IsHorizontal(edge1))
-            {
-                ip.Y = edge1.Bot.Y;
-            }
-            else
-            {
-                b1 = edge1.Bot.Y - (edge1.Bot.X / edge1.Dx);
-                ip.Y = Round(ip.X / edge1.Dx + b1);
-            }
-        }
-        else
-        {
-            b1 = edge1.Bot.X - edge1.Bot.Y * edge1.Dx;
-            b2 = edge2.Bot.X - edge2.Bot.Y * edge2.Dx;
-            double q = (b2 - b1) / (edge1.Dx - edge2.Dx);
-            ip.Y = Round(q);
-            if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                ip.X = Round(edge1.Dx * q + b1);
-            else
-                ip.X = Round(edge2.Dx * q + b2);
-        }
+        return true;
+    }
 
-        if (ip.Y < edge1.Top.Y || ip.Y < edge2.Top.Y)
-        {
-          if (edge1.Top.Y > edge2.Top.Y)
-            ip.Y = edge1.Top.Y;
-          else
-            ip.Y = edge2.Top.Y;
-          if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-            ip.X = TopX(edge1, ip.Y);
-          else
-            ip.X = TopX(edge2, ip.Y);
+    private ProcessIntersectList():void {
+        for (let iNode of this.m_IntersectList) {
+            this.IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
+            this.SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
         }
-        //finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
-        if (ip.Y > edge1.Curr.Y)
-        {
-          ip.Y = edge1.Curr.Y;
-          //better to use the more vertical edge to derive X ...
-          if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx)) 
-            ip.X = TopX(edge2, ip.Y);
-          else 
-            ip.X = TopX(edge1, ip.Y);
-        }
-      }
-      
+        m_IntersectList.length = 0;
+    }
+  
+    private ProcessEdgesAtTopOfScanbeam(topY:Int64):void {
+        let e = this.m_ActiveEdges;
+        while(e != null) {
+            //1. process maxima, treating them as if they're 'bent' horizontal edges,
+            //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
+            let IsMaximaEdge = IsMaxima(e, topY);
 
-      private void ProcessEdgesAtTopOfScanbeam(cInt topY)
-      {
-        TEdge e = m_ActiveEdges;
-        while(e != null)
-        {
-          //1. process maxima, treating them as if they're 'bent' horizontal edges,
-          //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
-          bool IsMaximaEdge = IsMaxima(e, topY);
-
-          if(IsMaximaEdge)
-          {
-            TEdge eMaxPair = GetMaximaPairEx(e);
-            IsMaximaEdge = (eMaxPair == null || !IsHorizontal(eMaxPair));
-          }
-
-          if(IsMaximaEdge)
-          {
-            if (StrictlySimple) InsertMaxima(e.Top.X);
-            TEdge ePrev = e.PrevInAEL;
-            DoMaxima(e);
-            if( ePrev == null) e = m_ActiveEdges;
-            else e = ePrev.NextInAEL;
-          }
-          else
-          {
-            //2. promote horizontal edges, otherwise update Curr.X and Curr.Y ...
-            if (IsIntermediate(e, topY) && IsHorizontal(e.NextInLML))
-            {
-              UpdateEdgeIntoAEL(ref e);
-              if (e.OutIdx >= 0)
-                AddOutPt(e, e.Bot);
-              AddEdgeToSEL(e);
-            } 
-            else
-            {
-              e.Curr.X = TopX( e, topY );
-              e.Curr.Y = topY;
-#if use_xyz
-              if (e.Top.Y == topY) e.Curr.Z = e.Top.Z;
-              else if (e.Bot.Y == topY) e.Curr.Z = e.Bot.Z;
-              else e.Curr.Z = 0;
-#endif
-            }
-            //When StrictlySimple and 'e' is being touched by another edge, then
-            //make sure both edges have a vertex here ...
-            if (StrictlySimple)
-            {
-              TEdge ePrev = e.PrevInAEL;
-              if ((e.OutIdx >= 0) && (e.WindDelta != 0) && ePrev != null &&
-                (ePrev.OutIdx >= 0) && (ePrev.Curr.X == e.Curr.X) &&
-                (ePrev.WindDelta != 0))
-              {
-                IntPoint ip = new IntPoint(e.Curr);
-#if use_xyz
-                SetZ(ref ip, ePrev, e);
-#endif
-                OutPt op = AddOutPt(ePrev, ip);
-                OutPt op2 = AddOutPt(e, ip);
-                AddJoin(op, op2, ip); //StrictlySimple (type-3) join
-              }
+            if (IsMaximaEdge) {
+                let eMaxPair = GetMaximaPairEx(e);
+                IsMaximaEdge = (eMaxPair == null || !IsHorizontal(eMaxPair));
             }
 
-            e = e.NextInAEL;
-          }
+            if (IsMaximaEdge) {
+                if (StrictlySimple) {
+                    InsertMaxima(e.Top.X);
+                }
+                let ePrev = e.PrevInAEL;
+                DoMaxima(e);
+                if (ePrev == null) {
+                    e = this.m_ActiveEdges;
+                } else {
+                    e = ePrev.NextInAEL;
+                }
+            } else {
+                //2. promote horizontal edges, otherwise update Curr.X and Curr.Y ...
+                if (IsIntermediate(e, topY) && IsHorizontal(e.NextInLML)) {
+                    e = this.UpdateEdgeIntoAEL(e);
+                    if (e.OutIdx >= 0) {
+                        this.AddOutPt(e, e.Bot);
+                    }
+                    this.AddEdgeToSEL(e);
+                } else {
+                    e.Curr.x = TopX(e, topY);
+                    e.Curr.y = topY;
+                }
+                //When StrictlySimple and 'e' is being touched by another edge, then
+                //make sure both edges have a vertex here ...
+                if (StrictlySimple) {
+                    let ePrev = e.PrevInAEL;
+                    if (e.OutIdx >= 0
+                        && e.WindDelta != 0
+                        && ePrev != null
+                        && ePrev.OutIdx >= 0
+                        && ePrev.Curr.x.equals(e.Curr.x)
+                        && ePrev.WindDelta != 0) {
+                        let ip = new IntPoint(e.Curr.x, e.Curr.y);
+                        let op = this.AddOutPt(ePrev, ip);
+                        let op2 = this.AddOutPt(e, ip);
+                        this.AddJoin(op, op2, ip); //StrictlySimple (type-3) join
+                    }
+                }
+
+                e = e.NextInAEL;
+            }
         }
 
         //3. Process horizontals at the Top of the scanbeam ...
-        ProcessHorizontals();
-        m_Maxima = null;
+        this.ProcessHorizontals();
+        this.m_Maxima = null;
 
         //4. Promote intermediate vertices ...
-        e = m_ActiveEdges;
-        while (e != null)
-        {
-          if(IsIntermediate(e, topY))
-          {
-            OutPt op = null;
-            if( e.OutIdx >= 0 ) 
-              op = AddOutPt(e, e.Top);
-            UpdateEdgeIntoAEL(ref e);
+        e = this.m_ActiveEdges;
+        while (e != null) {
+            if (IsIntermediate(e, topY)) {
+                let op:OutPt = null;
+                if (e.OutIdx >= 0) {
+                    op = this.AddOutPt(e, e.Top);
+                }
+                e = this.UpdateEdgeIntoAEL(e);
 
-            //if output polygons share an edge, they'll need joining later ...
-            TEdge ePrev = e.PrevInAEL;
-            TEdge eNext = e.NextInAEL;
-            if (ePrev != null && ePrev.Curr.X == e.Bot.X &&
-              ePrev.Curr.Y == e.Bot.Y && op != null &&
-              ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
-              SlopesEqual(e.Curr, e.Top, ePrev.Curr, ePrev.Top, m_UseFullRange) &&
-              (e.WindDelta != 0) && (ePrev.WindDelta != 0))
-            {
-              OutPt op2 = AddOutPt(ePrev, e.Bot);
-              AddJoin(op, op2, e.Top);
+                //if output polygons share an edge, they'll need joining later ...
+                let ePrev = e.PrevInAEL;
+                let eNext = e.NextInAEL;
+                if (ePrev != null 
+                    && ePrev.Curr.x.equals(e.Bot.x)
+                    && ePrev.Curr.y.equals(e.Bot.y)
+                    && op != null
+                    && ePrev.OutIdx >= 0 
+                    && ePrev.Curr.y.greaterThan(ePrev.Top.y)
+                    && SlopesEqual(e.Curr, e.Top, ePrev.Curr, ePrev.Top, this.m_UseFullRange)
+                    && e.WindDelta != 0
+                    && ePrev.WindDelta != 0) {
+                    let op2 = this.AddOutPt(ePrev, e.Bot);
+                    this.AddJoin(op, op2, e.Top);
+                } else if (eNext != null
+                    && eNext.Curr.x.equals(e.Bot.x)
+                    && eNext.Curr.y.equals(e.Bot.y)
+                    && op != null
+                    && eNext.OutIdx >= 0
+                    && eNext.Curr.y.greaterThan(eNext.Top.y)
+                    && SlopesEqual(e.Curr, e.Top, eNext.Curr, eNext.Top, this.m_UseFullRange)
+                    && e.WindDelta != 0
+                    && eNext.WindDelta != 0) {
+                    let op2 = this.AddOutPt(eNext, e.Bot);
+                    this.AddJoin(op, op2, e.Top);
+                }
             }
-            else if (eNext != null && eNext.Curr.X == e.Bot.X &&
-              eNext.Curr.Y == e.Bot.Y && op != null &&
-              eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
-              SlopesEqual(e.Curr, e.Top, eNext.Curr, eNext.Top, m_UseFullRange) &&
-              (e.WindDelta != 0) && (eNext.WindDelta != 0))
-            {
-              OutPt op2 = AddOutPt(eNext, e.Bot);
-              AddJoin(op, op2, e.Top);
-            }
-          }
-          e = e.NextInAEL;
+            e = e.NextInAEL;
         }
-      }
-      
+    }
 
-      private void DoMaxima(TEdge e)
+    private void DoMaxima(TEdge e)
       {
         TEdge eMaxPair = GetMaximaPairEx(e);
         if (eMaxPair == null)
@@ -2902,7 +2869,6 @@ export class Clipper extends ClipperBase {
           DeleteFromAEL(e);
           DeleteFromAEL(eMaxPair);
         }
-#if use_lines
         else if (e.WindDelta == 0)
         {
           if (e.OutIdx >= 0) 
@@ -2919,7 +2885,6 @@ export class Clipper extends ClipperBase {
           }
           DeleteFromAEL(eMaxPair);
         } 
-#endif
         else throw new ClipperException("DoMaxima error");
       }
       
