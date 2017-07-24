@@ -81,28 +81,40 @@ export class Int64 {
         return LongIntImpl.function64_64_64(this, other, "xor64");
     }
     
-    public add(b: Int64): Int64 {
-        return LongIntImpl.function64_64_64(this, b, "add64");
+    public add(b: Int64|number): Int64 {
+        if (b instanceof Int64) {
+            return LongIntImpl.function64_64_64(this, b, "add64");
+        }
+        return Int64.fromRoundNumber(this.toNumber() + b);
     }
 
-    public sub(b: Int64): Int64 {
-        return LongIntImpl.function64_64_64(this, b, "sub64");
+    public sub(b: Int64|number): Int64 {
+        if (b instanceof Int64) {
+            return LongIntImpl.function64_64_64(this, b, "sub64");
+        }
+        return Int64.fromRoundNumber(this.toNumber() - b);
     }
 
     public subtract(b: Int64): Int64 {
         return this.sub(b);
     }
 
-    public mul(b: Int64): Int64 {
-        return LongIntImpl.function64_64_64(this, b, "mul64");
+    public mul(b: Int64|number): Int64 {
+        if (b instanceof Int64) {
+            return LongIntImpl.function64_64_64(this, b, "mul64");
+        }
+        return Int64.fromRoundNumber(this.toNumber() * b);
     }
 
     public multiply(b: Int64): Int64 {
         return this.mul(b);
     }
 
-    public div(b: Int64): Int64 {
-        return LongIntImpl.function64_64_64(this, b, "divs64");
+    public div(b: Int64|number): Int64 {
+        if (b instanceof Int64) {
+            return LongIntImpl.function64_64_64(this, b, "divs64");
+        }
+        return Int64.fromRoundNumber(this.toNumber() / b);
     }
 
     public divide(b: Int64): Int64 {
@@ -472,8 +484,11 @@ export class Int128 {
         return LongIntImpl.function128_128_128(this, b, "mul128");
     }
 
-    public multiply(b: Int128): Int128 {
-        return this.mul(b);
+    public multiply(b: Int128|number): Int128 {
+        if (b instanceof Int128) {
+            return this.mul(b);
+        }
+        return Int128.fromRoundNumber(this.toNumber() * b);
     }
 
     public shiftLeft(numBits:number):Int128 {
@@ -618,8 +633,8 @@ export class Int128 {
         }
     }
 
-    public static fromRoundNumber(value:number):Int64 {
-        return Int64.fromNumber(Math.round(value));
+    public static fromRoundNumber(value:number):Int128 {
+        return Int128.fromNumber(Math.round(value));
     }
 
     public static fromInt(value:number):Int128 {

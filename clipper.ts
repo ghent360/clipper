@@ -42,8 +42,8 @@
 
 import {Int64, Int128} from "./intMath/int64";
 
-type Path=Array<IntPoint>;
-type Paths=Array<Array<IntPoint>>;
+export type Path=Array<IntPoint>;
+export type Paths=Array<Array<IntPoint>>;
 
 const Horizontal:number = -3.4E+38;
 const Skip:number = -2;
@@ -133,8 +133,8 @@ export class IntPoint {
     }
 
     public static Swap(first:IntPoint, second:IntPoint):void {
-        let tmpX = first.x.clone();
-        let tmpY = first.y.clone();
+        let tmpX = first.x;
+        let tmpY = first.y;
         first.x = second.x;
         first.y = second.y;
         second.x = tmpX;
@@ -162,7 +162,7 @@ class DoublePoint {
     }
 }
 
-class IntRect {
+export class IntRect {
     public left:Int64;
     public top:Int64;
     public right:Int64;
@@ -170,10 +170,10 @@ class IntRect {
 
     public static Init(left:Int64, top:Int64, right:Int64, bottom:Int64):IntRect {
         let result = new IntRect();
-        result.left = left.clone();
-        result.top = top.clone();
-        result.right = right.clone();
-        result.bottom = bottom.clone();
+        result.left = left;
+        result.top = top;
+        result.right = right;
+        result.bottom = bottom;
         return result;
     }
 
@@ -434,8 +434,9 @@ function RangeTest(pt:IntPoint, useFullRange:boolean):boolean {
 }
 
 function SetDx(e:TEdge):void {
-    e.delta.x = e.top.x.sub(e.bot.x);
-    e.delta.y = e.top.y.sub(e.bot.y);
+    let dx = e.top.x.sub(e.bot.x);
+    let dy = e.top.y.sub(e.bot.y);
+    e.delta = new IntPoint(dx, dy);
     if (e.delta.y.isZero()) {
         e.dx = Horizontal;
     } else {
@@ -466,7 +467,7 @@ function InitEdge2(e:TEdge, polyType:PolyType):void {
 function FindNextLocMin(e:TEdge):TEdge {
     let e2:TEdge;
     for (;;) {
-        while (e.bot !== e.prev.bot || e.curr === e.top) {
+        while (e.bot.notEquals(e.prev.bot) || e.curr.equals(e.top)) {
             e = e.next;
         }
         if (e.dx != Horizontal && e.prev.dx != Horizontal) {
@@ -1253,7 +1254,9 @@ class ClipperBase {
                 //only when the preceding edge attaches to the horizontal's left vertex
                 //unless a Skip edge is encountered when that becomes the top divide
                 Horz = Result;
-                while (Horz.prev.dx == Horizontal) Horz = Horz.prev;
+                while (Horz.prev.dx == Horizontal) {
+                    Horz = Horz.prev;
+                }
                 if (Horz.prev.top.x.greaterThan(Result.next.top.x)) {
                     Result = Horz.prev;
                 }
@@ -1510,11 +1513,11 @@ class ClipperBase {
 
         let highI = pg.length - 1;
         if (Closed) {
-            while (highI > 0 && (pg[highI] == pg[0])) {
+            while (highI > 0 && (pg[highI].equals(pg[0]))) {
                 --highI;
             }
         }
-        while (highI > 0 && (pg[highI] == pg[highI - 1])) {
+        while (highI > 0 && (pg[highI].equals(pg[highI - 1]))) {
             --highI;
         }
         if ((Closed && highI < 2) || (!Closed && highI < 1)) {
@@ -1524,7 +1527,7 @@ class ClipperBase {
         //create a new edge array ...
         let edges:TEdge[] = new Array<TEdge>(highI+1);
         for (let i = 0; i <= highI; i++) {
-            edges.push(new TEdge());
+            edges[i] = new TEdge();
         }
             
         let IsFlat = true;
@@ -1546,7 +1549,7 @@ class ClipperBase {
         let eLoopStop = eStart;
         for (;;) {
             //nb: allows matching start and end points when not Closed ...
-            if (E.curr == E.next.curr && (Closed || E.next != eStart)) {
+            if (E.curr.equals(E.next.curr) && (Closed || E.next != eStart)) {
                 if (E == E.next) break;
                 if (E == eStart) eStart = E.next;
                 E = RemoveEdge(E);
@@ -1625,7 +1628,9 @@ class ClipperBase {
 
         //workaround to avoid an endless loop in the while loop below when
         //open paths have matching start and end points ...
-        if (E.prev.bot == E.prev.top) E = E.next;
+        if (E.prev.bot.equals(E.prev.top)) {
+            E = E.next;
+        }
 
         for (;;) {
             E = FindNextLocMin(E);

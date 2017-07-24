@@ -3,6 +3,6 @@
         "target": "es6",
         "module": "commonjs",
         "sourceMap": true,
-        "types": ["webassembly-js-api", "mocha"]
+        "types": ["webassembly-js-api", "mocha", "node"]
     }
 }
