@@ -18,43 +18,51 @@ const MaxValue128AsDbl:number = Math.pow(2, 127);
 const MinValue128AsDbl:number = -Math.pow(2, 127);
 
 export class Int64 {
-    high:number;
-    low:number;
+    private high_:number;
+    private low_:number;
 
     constructor(low: number, high: number) {
-        this.low = low >>> 0;
-        this.high = high | 0;
+        this.low_ = low >>> 0;
+        this.high_ = high | 0;
+    }
+
+    public get high():number {
+        return this.high_;
+    }
+
+    public get low():number {
+        return this.low_;
     }
 
     public clone():Int64 {
-        return new Int64(this.low, this.high);
+        return new Int64(this.low_, this.high_);
     }
 
     public isZero():boolean {
-        return this.high == 0 && this.low == 0;
+        return this.high_ == 0 && this.low_ == 0;
     }
 
     public isNegative():boolean {
-        return this.high < 0;
+        return this.high_ < 0;
     }
 
     public isPositive():boolean {
-        return this.high > 0 
-            || (this.high == 0 && this.low != 0);
+        return this.high_ > 0 
+            || (this.high_ == 0 && this.low_ != 0);
     }
 
     public isOdd():boolean {
-        return (this.low & 1) == 1;
+        return (this.low_ & 1) == 1;
     }
 
     public equals(other:Int64):boolean {
-        return (this.high == other.high) 
-            && (this.low == other.low);
+        return (this.high_ == other.high_) 
+            && (this.low_ == other.low_);
     }
 
     public notEquals(other:Int64):boolean {
-        return (this.high != other.high)
-            || (this.low != other.low);
+        return (this.high_ != other.high_)
+            || (this.low_ != other.low_);
     }
 
     public not():Int64 {
@@ -265,14 +273,14 @@ export class Int64 {
     }
 
     public toNumber(): number {
-        return (this.low >>> 0) + this.high * TwoPow32;
+        return (this.low_ >>> 0) + this.high_ * TwoPow32;
     }
 
     public toInt():number {
-        return this.low;
+        return this.low_;
     }
 
-    public toString(radix:number = 10):string {
+    public toString__(radix:number = 10):string {
         if (radix < 2 || 36 < radix) {
             throw Error('radix out of range: ' + radix);
         }
@@ -288,9 +296,9 @@ export class Int64 {
                 let radixLong = Int64.fromNumber(radix);
                 let div = this.div(radixLong);
                 let rem = div.mul(radixLong).sub(this);
-                return div.toString(radix) + rem.toInt().toString(radix);
+                return div.toString__(radix) + rem.toInt().toString(radix);
             } else {
-                return '-' + this.neg().toString(radix);
+                return '-' + this.neg().toString__(radix);
             }
         }
 
@@ -298,7 +306,7 @@ export class Int64 {
         // minimize the calls to the very expensive emulated div.
         let radixToPower = Int64.fromNumber(Math.pow(radix, 6));
 
-        let rem = new Int64(this.low, this.high);
+        let rem = new Int64(this.low_, this.high_);
         let result = '';
         while (true) {
             let remDiv = rem.div(radixToPower);
@@ -322,10 +330,10 @@ export class Int64 {
 
     public static Swap(one:Int64, other:Int64):void {
         let tmp = one.clone();
-        one.low = other.low;
-        one.high = other.high;
-        other.low = tmp.low;
-        other.high = tmp.high;
+        one.low_ = other.low_;
+        one.high_ = other.high_;
+        other.low_ = tmp.low_;
+        other.high_ = tmp.high_;
     }
 
     public static max(a:Int64, b:Int64):Int64 {
@@ -342,54 +350,70 @@ export class Int64 {
 }
 
 export class Int128 {
-    d0:number;
-    d1:number;
-    d2:number;
-    d3:number;
+    private d0_:number;
+    private d1_:number;
+    private d2_:number;
+    private d3_:number;
 
     constructor(d0: number, d1: number, d2: number, d3: number) {
-        this.d0 = d0 >>> 0;
-        this.d1 = d1 >>> 0;
-        this.d2 = d2 >>> 0;
-        this.d3 = d3 | 0;
+        this.d0_ = d0 >>> 0;
+        this.d1_ = d1 >>> 0;
+        this.d2_ = d2 >>> 0;
+        this.d3_ = d3 | 0;
+    }
+
+    public get d0():number {
+        return this.d0_;
+    }
+
+    public get d1():number {
+        return this.d1_;
+    }
+
+    public get d2():number {
+        return this.d2_;
+    }
+
+    public get d3():number {
+        return this.d3_;
     }
 
     public clone():Int128 {
-        return new Int128(this.d0, this.d1, this.d2, this.d3);
+        return new Int128(this.d0_, this.d1_, this.d2_, this.d3_);
     }
 
     public isZero():boolean {
-        return this.d3 == 0 
-            && this.d2 == 0
-            && this.d1 == 0
-            && this.d0 == 0;
+        return this.d3_ == 0 
+            && this.d2_ == 0
+            && this.d1_ == 0
+            && this.d0_ == 0;
     }
 
     public isNegative():boolean {
-        return this.d3 < 0;
+        return this.d3_ < 0;
     }
 
     public isPositive():boolean {
-        return this.d3 > 0 
-            || (this.d3 == 0 && (this.d2 != 0 || this.d1 != 0 || this.d0 != 0));
+        return this.d3_ > 0 
+            || (this.d3_ == 0 && (this.d2_ != 0 || this.d1_ != 0 || this.d0_ != 0));
     }
 
     public isOdd():boolean {
-        return (this.d0 & 1) == 1;
+        return (this.d0_ & 1) == 1;
     }
 
     public equals(other:Int128):boolean {
-        return (this.d3 == other.d3) 
-            && (this.d2 == other.d2)
-            && (this.d1 == other.d1)
-            && (this.d0 == other.d0);
+        return (this.d3_ == other.d3_) 
+            && (this.d2_ == other.d2_)
+            && (this.d1_ == other.d1_)
+            && (this.d0_ == other.d0_);
     }
 
     public notEquals(other:Int128):boolean {
-        return (this.d3 != other.d3)
-            || (this.d2 != other.d2)
-            || (this.d1 != other.d1)
-            || (this.d0 != other.d0);
+        return (this.d3_ != other.d3_)
+            || (this.d2_ != other.d2_)
+            || (this.d1_ != other.d1_)
+            || (this.d0_ != other.d0_);
     }
 
     public not():Int128 {
@@ -499,29 +523,29 @@ export class Int128 {
             let value = this.clone();
             if (numBits >= 96) {
                 numBits -= 96
-                return new Int128(0, 0, 0, this.d0 << numBits);
+                return new Int128(0, 0, 0, this.d0_ << numBits);
             }
             if (numBits >= 64) {
                 numBits -= 64;
                 return new Int128(
                     0,
                     0,
-                    this.d0 << numBits,
-                    this.d1 << numBits | this.d0 >>> (32 - numBits));
+                    this.d0_ << numBits,
+                    this.d1_ << numBits | this.d0_ >>> (32 - numBits));
             }
             if (numBits >= 32) {
                 numBits -= 32;
                 return new Int128(
                     0,
-                    this.d0 << numBits,
-                    this.d1 << numBits | this.d0 >>> (32 - numBits),
-                    this.d2 << numBits | this.d1 >>> (32 - numBits));
+                    this.d0_ << numBits,
+                    this.d1_ << numBits | this.d0_ >>> (32 - numBits),
+                    this.d2_ << numBits | this.d1_ >>> (32 - numBits));
             }
             return new Int128(
-                this.d0 << numBits,
-                this.d1 << numBits | this.d0 >>> (32 - numBits),
-                this.d2 << numBits | this.d1 >>> (32 - numBits),
-                this.d3 << numBits | this.d2 >>> (32 - numBits));
+                this.d0_ << numBits,
+                this.d1_ << numBits | this.d0_ >>> (32 - numBits),
+                this.d2_ << numBits | this.d1_ >>> (32 - numBits),
+                this.d3_ << numBits | this.d2_ >>> (32 - numBits));
         }
     }
 
@@ -533,29 +557,29 @@ export class Int128 {
             let value = this.clone();
             if (numBits >= 96) {
                 numBits -= 96
-                return new Int128(this.d3 >> numBits, 0, 0, 0);
+                return new Int128(this.d3_ >> numBits, 0, 0, 0);
             }
             if (numBits >= 64) {
                 numBits -= 64;
                 return new Int128(
-                    this.d3 >> numBits | this.d2 << (32 - numBits),
-                    this.d3 >> numBits,
+                    this.d3_ >> numBits | this.d2_ << (32 - numBits),
+                    this.d3_ >> numBits,
                     0,
                     0);
             }
             if (numBits >= 32) {
                 numBits -= 32;
                 return new Int128(
-                    this.d2 >>> numBits | this.d1 << (32 - numBits),
-                    this.d3 >> numBits | this.d2 << (32 - numBits),
-                    this.d3 >> numBits,
+                    this.d2_ >>> numBits | this.d1_ << (32 - numBits),
+                    this.d3_ >> numBits | this.d2_ << (32 - numBits),
+                    this.d3_ >> numBits,
                     0);
             }
             return new Int128(
-                this.d1 >>> numBits | this.d0 << (32 - numBits),
-                this.d2 >>> numBits | this.d1 << (32 - numBits),
-                this.d3 >> numBits | this.d2 << (32 - numBits),
-                this.d3 >> numBits);
+                this.d1_ >>> numBits | this.d0_ << (32 - numBits),
+                this.d2_ >>> numBits | this.d1_ << (32 - numBits),
+                this.d3_ >> numBits | this.d2_ << (32 - numBits),
+                this.d3_ >> numBits);
         }
     }
 
@@ -567,37 +591,37 @@ export class Int128 {
             let value = this.clone();
             if (numBits >= 96) {
                 numBits -= 96
-                return new Int128(this.d3 >>> numBits, 0, 0, 0);
+                return new Int128(this.d3_ >>> numBits, 0, 0, 0);
             }
             if (numBits >= 64) {
                 numBits -= 64;
                 return new Int128(
-                    this.d3 >>> numBits | this.d2 << (32 - numBits),
-                    this.d3 >>> numBits,
+                    this.d3_ >>> numBits | this.d2_ << (32 - numBits),
+                    this.d3_ >>> numBits,
                     0,
                     0);
             }
             if (numBits >= 32) {
                 numBits -= 32;
                 return new Int128(
-                    this.d2 >>> numBits | this.d1 << (32 - numBits),
-                    this.d3 >>> numBits | this.d2 << (32 - numBits),
-                    this.d3 >>> numBits,
+                    this.d2_ >>> numBits | this.d1_ << (32 - numBits),
+                    this.d3_ >>> numBits | this.d2_ << (32 - numBits),
+                    this.d3_ >>> numBits,
                     0);
             }
             return new Int128(
-                this.d1 >>> numBits | this.d0 << (32 - numBits),
-                this.d2 >>> numBits | this.d1 << (32 - numBits),
-                this.d3 >>> numBits | this.d2 << (32 - numBits),
-                this.d3 >>> numBits);
+                this.d1_ >>> numBits | this.d0_ << (32 - numBits),
+                this.d2_ >>> numBits | this.d1_ << (32 - numBits),
+                this.d3_ >>> numBits | this.d2_ << (32 - numBits),
+                this.d3_ >>> numBits);
         }
     }
 
     public toNumber():number {
-        return (this.d0 >>> 0)
-            + (this.d1 >>> 0) * TwoPow32
-            + (this.d2 >>> 0) * TwoPow64
-            + (this.d3 >>> 0) * TwoPow96;
+        return (this.d0_ >>> 0)
+            + (this.d1_ >>> 0) * TwoPow32
+            + (this.d2_ >>> 0) * TwoPow64
+            + (this.d3_ >>> 0) * TwoPow96;
     }
 
     public abs():Int128 {
@@ -652,14 +676,14 @@ export class Int128 {
 
     public static Swap(one:Int128, other:Int128):void {
         let tmp = one.clone();
-        one.d0 = other.d0;
-        one.d1 = other.d1;
-        one.d2 = other.d2;
-        one.d3 = other.d3;
-        other.d0 = tmp.d0;
-        other.d1 = tmp.d1;
-        other.d2 = tmp.d2;
-        other.d3 = tmp.d3;
+        one.d0_ = other.d0_;
+        one.d1_ = other.d1_;
+        one.d2_ = other.d2_;
+        one.d3_ = other.d3_;
+        other.d0_ = tmp.d0_;
+        other.d1_ = tmp.d1_;
+        other.d2_ = tmp.d2_;
+        other.d3_ = tmp.d3_;
     }
 
     public static max(a:Int128, b:Int128):Int128 {

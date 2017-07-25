@@ -111,17 +111,30 @@ enum NodeType {
 }
 
 export class IntPoint {
-    constructor(public x:Int64, public y:Int64) {
+    private x_:Int64;
+    private y_:Int64;
+
+    constructor(x:Int64, y:Int64) {
+        this.x_ = x;
+        this.y_ = y;
+    }
+
+    public get x() {
+        return this.x_;
+    }
+
+    public get y() {
+        return this.y_;
     }
 
     public equals(other:IntPoint): boolean {
-        return this.x.equals(other.x)
-            && this.y.equals(other.y);
+        return this.x_.equals(other.x_)
+            && this.y_.equals(other.y_);
     }
 
     public notEquals(other:IntPoint): boolean {
-        return this.x.notEquals(other.x)
-            || this.y.notEquals(other.y);
+        return this.x_.notEquals(other.x_)
+            || this.y_.notEquals(other.y_);
     }
 
     public static fromDoubles(x:number, y:number):IntPoint {
@@ -129,21 +142,21 @@ export class IntPoint {
     }
 
     public static copy(other:IntPoint):IntPoint {
-        return new IntPoint(other.x, other.y);
+        return new IntPoint(other.x_, other.y_);
     }
 
     public static Swap(first:IntPoint, second:IntPoint):void {
-        let tmpX = first.x;
-        let tmpY = first.y;
-        first.x = second.x;
-        first.y = second.y;
-        second.x = tmpX;
-        second.y = tmpY;
+        let tmpX = first.x_;
+        let tmpY = first.y_;
+        first.x_ = second.x_;
+        first.y_ = second.y_;
+        second.x_ = tmpX;
+        second.y_ = tmpY;
     }
 }
 
 class DoublePoint {
-    constructor(public x:number, public y:number) {}
+    constructor(readonly x:number, readonly y:number) {}
 
     public equals(other:DoublePoint): boolean {
         return this.x == other.x && this.y == other.y;
@@ -163,22 +176,15 @@ class DoublePoint {
 }
 
 export class IntRect {
-    public left:Int64;
-    public top:Int64;
-    public right:Int64;
-    public bottom:Int64;
-
-    public static Init(left:Int64, top:Int64, right:Int64, bottom:Int64):IntRect {
-        let result = new IntRect();
-        result.left = left;
-        result.top = top;
-        result.right = right;
-        result.bottom = bottom;
-        return result;
+    constructor(
+        readonly left:Int64,
+        readonly top:Int64,
+        readonly right:Int64,
+        readonly bottom:Int64) {
     }
 
     public static copy(other:IntRect):IntRect {
-        return IntRect.Init(other.left, other.top, other.right, other.bottom);
+        return new IntRect(other.left, other.top, other.right, other.bottom);
     }
 }
 
@@ -259,55 +265,122 @@ export class PolyTree extends PolyNode {
 }
 
 class TEdge {
-    bot:IntPoint;
-    curr:IntPoint; //current (updated for every new scanbeam)
-    top:IntPoint;
-    delta:IntPoint;
-    dx:number;
-    polyTyp:PolyType;
-    side:EdgeSide; //side only refers to current side of solution poly
-    windDelta:number; //1 or -1 depending on winding direction
-    windCnt:number;
-    windCnt2:number; //winding count of the opposite polytype
-    outIdx:number;
-    next:TEdge;
-    prev:TEdge;
-    nextInLML:TEdge;
-    nextInAEL:TEdge;
-    prevInAEL:TEdge;
-    nextInSEL:TEdge;
-    prevInSEL:TEdge;
+    private bot_:IntPoint;
+    private curr_:IntPoint; //current (updated for every new scanbeam)
+    private top_:IntPoint;
+    private delta_:IntPoint;
+
+    public dx:number;
+    public polyTyp:PolyType;
+    public side:EdgeSide; //side only refers to current side of solution poly
+    public windDelta:number; //1 or -1 depending on winding direction
+    public windCnt:number;
+    public windCnt2:number; //winding count of the opposite polytype
+    public outIdx:number;
+
+    public next:TEdge = null;
+    public prev:TEdge = null;
+
+    public nextInLML:TEdge = null;
+
+    public nextInAEL:TEdge = null;
+    public prevInAEL:TEdge = null;
+
+    public nextInSEL:TEdge = null;
+    public prevInSEL:TEdge = null;
+
+    public get bot():IntPoint {
+        return this.bot_;
+    }
+
+    public get top():IntPoint {
+        return this.top_;
+    }
+
+    public get curr():IntPoint {
+        return this.curr_;
+    }
+
+    public get delta():IntPoint {
+        return this.delta_;
+    }
+
+    public setTop(v:IntPoint):void {
+        this.top_ = v;
+    }
+
+    public setBot(v:IntPoint):void {
+        this.bot_ = v;
+    }
+
+    public setCurr(v:IntPoint):void {
+        this.curr_ = v;
+    }
+
+    public setDelta(v:IntPoint):void {
+        this.delta_ = v;
+    }
 }
 
 class IntersectNode {
-    edge1:TEdge;
-    edge2:TEdge;
-    pt:IntPoint;
+    constructor(readonly edge1:TEdge,
+        readonly edge2:TEdge,
+        readonly pt:IntPoint) {
+    }
 }
 
 class LocalMinima {
-    y:Int64;
-    leftBound:TEdge;
-    rightBound:TEdge;
-    next:LocalMinima;
+    public next:LocalMinima;
+    private leftBound_:TEdge;
+    private rightBound_:TEdge;
+
+    constructor(
+        readonly y:Int64,
+        leftBound:TEdge,
+        rightBound:TEdge) {
+        this.leftBound_ = leftBound;
+        this.rightBound_ = rightBound;
+        this.next = null;
+    }
+
+    public get leftBound():TEdge {
+        return this.leftBound_;
+    }
+
+    public get rightBound():TEdge {
+        return this.rightBound_;
+    }
+
+    public clearLeftBound():void {
+        this.leftBound_ = null;
+    }
+
+    public clearRightBound():void {
+        this.rightBound_ = null;
+    }
 }
 
 class Scanbeam {
-    y:Int64;
-    next:Scanbeam;
+    public y:Int64;
+    public next:Scanbeam = null;
 }
 
 class Maxima {
-    x:Int64;
-    next:Maxima;
-    prev:Maxima;
+    public next:Maxima = null;
+    public prev:Maxima = null;
+
+    constructor (readonly x:Int64) {
+        this.next = null;
+        this.prev = null;
+    }
 }
 
 class OutPt {
-    idx:number;
-    pt:IntPoint;
-    next:OutPt;
-    prev:OutPt;
+    public idx:number;
+    public pt:IntPoint;
+
+    public next:OutPt = null;
+    public prev:OutPt = null;
 }
 
 //OutRec: contains a path in the clipping solution. Edges in the AEL will
@@ -320,12 +393,24 @@ class OutRec {
     pts:OutPt;
     bottomPt:OutPt;
     polyNode:PolyNode;
+
+    constructor() {
+        this.idx = Unassigned;
+        this.isHole = false;
+        this.isOpen = false;
+        this.firstLeft = null;
+        this.pts = null;
+        this.bottomPt = null;
+        this.polyNode = null;
+    }
 }
 
 class Join {
-    outPt1:OutPt;
-    outPt2:OutPt;
-    offPt:IntPoint;
+    constructor (
+        public outPt1:OutPt,
+        public outPt2:OutPt,
+        public offPt:IntPoint) {
+    }
 }
 
 function MyIntersectNodeSort(node1:IntersectNode, node2:IntersectNode):number {
@@ -436,7 +521,7 @@ function RangeTest(pt:IntPoint, useFullRange:boolean):boolean {
 function SetDx(e:TEdge):void {
     let dx = e.top.x.sub(e.bot.x);
     let dy = e.top.y.sub(e.bot.y);
-    e.delta = new IntPoint(dx, dy);
+    e.setDelta(new IntPoint(dx, dy));
     if (e.delta.y.isZero()) {
         e.dx = Horizontal;
     } else {
@@ -448,17 +533,17 @@ function InitEdge(
     e:TEdge, eNext:TEdge, ePrev:TEdge, pt:IntPoint):void {
     e.next = eNext;
     e.prev = ePrev;
-    e.curr = pt;
+    e.setCurr(pt);
     e.outIdx = Unassigned;
 }
 
 function InitEdge2(e:TEdge, polyType:PolyType):void {
     if (e.curr.y.greaterThanOrEqual(e.next.curr.y)) {
-        e.bot = e.curr;
-        e.top = e.next.curr;
+        e.setBot(e.curr);
+        e.setTop(e.next.curr);
     } else {
-        e.top = e.curr;
-        e.bot = e.next.curr;
+        e.setTop(e.curr);
+        e.setBot(e.next.curr);
     }
     SetDx(e);
     e.polyTyp = polyType;
@@ -521,7 +606,8 @@ function TopX(edge:TEdge, currentY:Int64):Int64 {
     if (currentY.equals(edge.top.y)) {
         return edge.top.x;
     }
-    return edge.bot.x.add(Int64.fromRoundNumber(edge.dx * currentY.sub(edge.bot.y).toNumber()));
+    return edge.bot.x.add(
+        Int64.fromRoundNumber(edge.dx * currentY.sub(edge.bot.y).toNumber()));
 }
 
 function E2InsertsBeforeE1(e1:TEdge, e2:TEdge):boolean {
@@ -1215,11 +1301,7 @@ class ClipperBase {
             } else {
                 //there are more edges in the bound beyond result starting with E
                 E = LeftBoundIsForward ? Result.next : Result.prev;
-                let locMin = new LocalMinima();
-                locMin.next = null;
-                locMin.y = E.bot.y;
-                locMin.leftBound = null;
-                locMin.rightBound = E;
+                let locMin = new LocalMinima(E.bot.y, null, E);
                 E.windDelta = 0;
                 Result = this.ProcessBound(E, LeftBoundIsForward);
                 this.InsertLocalMinima(locMin);
@@ -1316,12 +1398,12 @@ class ClipperBase {
             let e = lm.leftBound;
 
             if (e != null) {
-                e.curr = e.bot;
+                e.setCurr(e.bot);
                 e.outIdx = Unassigned;
             }
             e = lm.rightBound;
             if (e != null) {
-                e.curr = e.bot;
+                e.setCurr(e.bot);
                 e.outIdx = Unassigned;
             }
             lm = lm.next;
@@ -1359,23 +1441,22 @@ class ClipperBase {
         while (i < cnt && paths[i].length == 0) i++;
         let zero = Int64.fromInt(0);
         if (i == cnt) {
-            return IntRect.Init(zero, zero, zero, zero);
+            return new IntRect(zero, zero, zero, zero);
         }
-        let result = new IntRect();
-        result.left = paths[i][0].x;
-        result.right = result.left;
-        result.top = paths[i][0].y;
-        result.bottom = result.top;
+        let resultLeft = paths[i][0].x;
+        let resultRight = resultLeft;
+        let resultTop = paths[i][0].y;
+        let resultBottom = resultTop;
         for (; i < cnt; i++) {
             for (let j = 0; j < paths[i].length; j++)
             {
-                if (paths[i][j].x.lessThan(result.left)) result.left = paths[i][j].x;
-                else if (paths[i][j].x.greaterThan(result.right)) result.right = paths[i][j].x;
-                if (paths[i][j].y.lessThan(result.top)) result.top = paths[i][j].y;
-                else if (paths[i][j].y.greaterThan(result.bottom)) result.bottom = paths[i][j].y;
+                if (paths[i][j].x.lessThan(resultLeft)) resultLeft = paths[i][j].x;
+                else if (paths[i][j].x.greaterThan(resultRight)) resultRight = paths[i][j].x;
+                if (paths[i][j].y.lessThan(resultTop)) resultTop = paths[i][j].y;
+                else if (paths[i][j].y.greaterThan(resultBottom)) resultBottom = paths[i][j].y;
             }
         }
-        return result;
+        return new IntRect(resultLeft, resultTop, resultRight, resultBottom);
     }
 
     protected PopScanbeam():{Y:Int64, r:boolean} {
@@ -1394,13 +1475,6 @@ class ClipperBase {
 
     protected CreateOutRec():OutRec {
         let result = new OutRec();
-        result.idx = Unassigned;
-        result.isHole = false;
-        result.isOpen = false;
-        result.firstLeft = null;
-        result.pts = null;
-        result.bottomPt = null;
-        result.polyNode = null;
         this.m_PolyOuts.push(result);
         result.idx = this.m_PolyOuts.length - 1;
         return result;
@@ -1430,7 +1504,7 @@ class ClipperBase {
         e.nextInLML.windCnt = e.windCnt;
         e.nextInLML.windCnt2 = e.windCnt2;
         e = e.nextInLML;
-        e.curr = e.bot;
+        e.setCurr(e.bot);
         e.prevInAEL = AelPrev;
         e.nextInAEL = AelNext;
         if (!IsHorizontal(e)) {
@@ -1514,11 +1588,11 @@ class ClipperBase {
         let highI = pg.length - 1;
         if (Closed) {
             while (highI > 0 && (pg[highI].equals(pg[0]))) {
-                --highI;
+                highI--;
             }
         }
         while (highI > 0 && (pg[highI].equals(pg[highI - 1]))) {
-            --highI;
+            highI--;
         }
         if ((Closed && highI < 2) || (!Closed && highI < 1)) {
             return false;
@@ -1533,7 +1607,7 @@ class ClipperBase {
         let IsFlat = true;
 
         //1. Basic (first) edge initialization ...
-        edges[1].curr = pg[1];
+        edges[1].setCurr(pg[1]);
         this.m_UseFullRange = RangeTest(pg[0], this.m_UseFullRange);
         this.m_UseFullRange = RangeTest(pg[highI], this.m_UseFullRange);
         InitEdge(edges[0], edges[1], edges[highI], pg[0]);
@@ -1604,11 +1678,7 @@ class ClipperBase {
                 return false;
             }
             E.prev.outIdx = Skip;
-            let locMin = new LocalMinima();
-            locMin.next = null;
-            locMin.y = E.bot.y;
-            locMin.leftBound = null;
-            locMin.rightBound = E;
+            let locMin = new LocalMinima(E.bot.y, null, E);
             locMin.rightBound.side = EdgeSide.esRight;
             locMin.rightBound.windDelta = 0;
             for ( ; ; ) {
@@ -1643,16 +1713,12 @@ class ClipperBase {
 
             //E and E.Prev now share a local minima (left aligned if horizontal).
             //Compare their slopes to find which starts which bound ...
-            let locMin = new LocalMinima();
-            locMin.next = null;
-            locMin.y = E.bot.y;
+            let locMin:LocalMinima;
             if (E.dx < E.prev.dx) {
-                locMin.leftBound = E.prev;
-                locMin.rightBound = E;
+                locMin = new LocalMinima(E.bot.y, E.prev, E);
                 leftBoundIsForward = false; //Q.nextInLML = Q.prev
             } else {
-                locMin.leftBound = E;
-                locMin.rightBound = E.prev;
+                locMin = new LocalMinima(E.bot.y, E, E.prev);
                 leftBoundIsForward = true; //Q.nextInLML = Q.next
             }
             locMin.leftBound.side = EdgeSide.esLeft;
@@ -1678,9 +1744,9 @@ class ClipperBase {
             }
 
             if (locMin.leftBound.outIdx == Skip) {
-                locMin.leftBound = null;
+                locMin.clearLeftBound();
             } else if (locMin.rightBound.outIdx == Skip) {
-                locMin.rightBound = null;
+                locMin.clearRightBound();
             }
             this.InsertLocalMinima(locMin);
             if (!leftBoundIsForward) {
@@ -1736,8 +1802,7 @@ export class Clipper extends ClipperBase {
 
     private InsertMaxima(X:Int64):void {
         //double-linked list: sorted ascending, ignoring dups.
-        let newMax = new Maxima();
-        newMax.x = X;
+        let newMax = new Maxima(X);
         if (this.m_Maxima == null) {
             this.m_Maxima = newMax;
             this.m_Maxima.next = null;
@@ -1911,17 +1976,12 @@ export class Clipper extends ClipperBase {
     }
 
     private AddJoin(Op1:OutPt, Op2:OutPt, OffPt:IntPoint):void {
-        let j = new Join();
-        j.outPt1 = Op1;
-        j.outPt2 = Op2;
-        j.offPt = OffPt;
+        let j = new Join(Op1, Op2, OffPt);
         this.m_Joins.push(j);
     }
 
     private AddGhostJoin(Op:OutPt, OffPt:IntPoint):void {
-        let j = new Join();
-        j.outPt1 = Op;
-        j.offPt = OffPt;
+        let j = new Join(Op, null, OffPt);
         this.m_GhostJoins.push(j);
     }
   
@@ -3037,7 +3097,7 @@ export class Clipper extends ClipperBase {
         while (e != null) {
             e.prevInSEL = e.prevInAEL;
             e.nextInSEL = e.nextInAEL;
-            e.curr.x = TopX(e, topY);
+            e.setCurr(new IntPoint(TopX(e, topY), e.curr.y));
             e = e.nextInAEL;
         }
 
@@ -3054,11 +3114,7 @@ export class Clipper extends ClipperBase {
                     if (pt.y.lessThan(topY)) {
                         pt = new IntPoint(TopX(e, topY), topY);
                     }
-                    let newNode = new IntersectNode();
-                    newNode.edge1 = e;
-                    newNode.edge2 = eNext;
-                    newNode.pt = pt;
-                    this.m_IntersectList.push(newNode);
+                    this.m_IntersectList.push(new IntersectNode(e, eNext, pt));
 
                     this.SwapPositionsInSEL(e, eNext);
                     isModified = true;
@@ -3142,8 +3198,7 @@ export class Clipper extends ClipperBase {
                     }
                     this.AddEdgeToSEL(e);
                 } else {
-                    e.curr.x = TopX(e, topY);
-                    e.curr.y = topY;
+                    e.setCurr(new IntPoint(TopX(e, topY), topY));
                 }
                 //When StrictlySimple and 'e' is being touched by another edge, then
                 //make sure both edges have a vertex here ...
@@ -4068,7 +4123,7 @@ export class ClipperOffset {
     private m_miterLim:number;
     private m_StepsPerRad:number;
 
-    private m_lowest:IntPoint;
+    private m_lowest:{x:number, y:number};
     private m_polyNodes:PolyNode = new PolyNode();
 
     public ArcTolerance:number;
@@ -4077,12 +4132,12 @@ export class ClipperOffset {
     public constructor(miterLimit:number = 2.0, arcTolerance:number = DefArcTolerance) {
         this.MiterLimit = miterLimit;
         this.ArcTolerance = arcTolerance;
-        this.m_lowest.x = Int64.fromInt(-1);
+        this.m_lowest.x = -1;
     }
 
     public clear():void {
         this.m_polyNodes.children.length = 0;
-        this.m_lowest.x = Int64.fromInt(-1);
+        this.m_lowest.x = -1;
     }
 
     public AddPath(path:Path, joinType:JoinType, endType:EndType):void {
@@ -4125,14 +4180,14 @@ export class ClipperOffset {
         if (endType != EndType.etClosedPolygon) {
             return;
         }
-        if (this.m_lowest.x.isNegative()) {
-            this.m_lowest = new IntPoint(Int64.fromInt(this.m_polyNodes.childCount - 1), Int64.fromInt(k));
+        if (this.m_lowest.x < 0) {
+            this.m_lowest = {x:this.m_polyNodes.childCount - 1, y:k};
         } else {
-            let ip = this.m_polyNodes.children[this.m_lowest.x.toInt()].polygon[this.m_lowest.y.toInt()];
+            let ip = this.m_polyNodes.children[this.m_lowest.x].polygon[this.m_lowest.y];
             if (newNode.polygon[k].y.greaterThan(ip.y)
                 || (newNode.polygon[k].y.equals(ip.y)
                     && newNode.polygon[k].x.lessThan(ip.x))) {
-                this.m_lowest = new IntPoint(Int64.fromInt(this.m_polyNodes.childCount - 1), Int64.fromInt(k));
+                this.m_lowest = {x:this.m_polyNodes.childCount - 1, y:k};
             }
         }
     }
@@ -4146,8 +4201,8 @@ export class ClipperOffset {
     private FixOrientations():void {
         //fixup orientations of all closed paths if the orientation of the
         //closed path with the lowermost vertex is wrong ...
-        if (!this.m_lowest.x.isNegative() && 
-            !Orientation(this.m_polyNodes.children[this.m_lowest.x.toInt()].polygon)) {
+        if (this.m_lowest.x >= 0 && 
+            !Orientation(this.m_polyNodes.children[this.m_lowest.x].polygon)) {
             for (let i = 0; i < this.m_polyNodes.childCount; i++) {
                 let node = this.m_polyNodes.children[i];
                 if (node.endType == EndType.etClosedPolygon ||
