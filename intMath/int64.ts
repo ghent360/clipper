@@ -280,7 +280,7 @@ export class Int64 {
         return this.low_;
     }
 
-    public toString__(radix:number = 10):string {
+    public toString(radix:number = 10):string {
         if (radix < 2 || 36 < radix) {
             throw Error('radix out of range: ' + radix);
         }
@@ -296,9 +296,9 @@ export class Int64 {
                 let radixLong = Int64.fromNumber(radix);
                 let div = this.div(radixLong);
                 let rem = div.mul(radixLong).sub(this);
-                return div.toString__(radix) + rem.toInt().toString(radix);
+                return div.toString(radix) + rem.toInt().toString(radix);
             } else {
-                return '-' + this.neg().toString__(radix);
+                return '-' + this.neg().toString(radix);
             }
         }
 
