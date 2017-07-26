@@ -37,8 +37,8 @@ function parseWrl(content:string[]):c.Paths {
             let x = Number.parseFloat(line[0]);
             let y = Number.parseFloat(line[1]);
             poly[vertIdx] = new c.IntPoint(
-                Int64.fromRoundNumber(x * 1000),
-                Int64.fromRoundNumber(y * 1000));
+                Int64.fromRoundNumber(x),
+                Int64.fromRoundNumber(y));
         }
         result[polyIdx] = poly;
     }

@@ -522,7 +522,7 @@ function SetDx(e:TEdge):void {
     let dx = e.top.x.sub(e.bot.x);
     let dy = e.top.y.sub(e.bot.y);
     e.setDelta(new IntPoint(dx, dy));
-    if (e.delta.y.isZero()) {
+    if (dy.isZero()) {
         e.dx = Horizontal;
     } else {
         e.dx = e.delta.x.div(e.delta.y).toNumber();
@@ -599,7 +599,11 @@ function ReverseHorizontal(e:TEdge):void {
     //swap horizontal edges' top and bottom x's so they follow the natural
     //progression of the bounds - ie so their xbots will align with the
     //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
-    Int64.Swap(e.top.x, e.bot.x);
+    let top = new IntPoint(e.bot.x, e.top.y);
+    let bot = new IntPoint(e.top.x, e.bot.y);
+    //Int64.Swap(e.top.x, e.bot.x);
+    e.setTop(top);
+    e.setBot(bot);
 }
 
 function TopX(edge:TEdge, currentY:Int64):Int64 {
