@@ -144,15 +144,6 @@ export class IntPoint {
     public static copy(other:IntPoint):IntPoint {
         return new IntPoint(other.x_, other.y_);
     }
-
-    public static Swap(first:IntPoint, second:IntPoint):void {
-        let tmpX = first.x_;
-        let tmpY = first.y_;
-        first.x_ = second.x_;
-        first.y_ = second.y_;
-        second.x_ = tmpX;
-        second.y_ = tmpY;
-    }
 }
 
 class DoublePoint {
@@ -361,8 +352,11 @@ class LocalMinima {
 }
 
 class Scanbeam {
-    public y:Int64;
-    public next:Scanbeam = null;
+    public next:Scanbeam;
+    constructor(
+        readonly y:Int64) {
+        this.next = null;
+    }
 }
 
 class Maxima {
@@ -533,17 +527,17 @@ function InitEdge(
     e:TEdge, eNext:TEdge, ePrev:TEdge, pt:IntPoint):void {
     e.next = eNext;
     e.prev = ePrev;
-    e.setCurr(pt);
+    e.setCurr(new IntPoint(pt.x, pt.y));
     e.outIdx = Unassigned;
 }
 
 function InitEdge2(e:TEdge, polyType:PolyType):void {
     if (e.curr.y.greaterThanOrEqual(e.next.curr.y)) {
-        e.setBot(e.curr);
-        e.setTop(e.next.curr);
+        e.setBot(new IntPoint(e.curr.x, e.curr.y));
+        e.setTop(new IntPoint(e.next.curr.x, e.next.curr.y));
     } else {
-        e.setTop(e.curr);
-        e.setBot(e.next.curr);
+        e.setTop(new IntPoint(e.curr.x, e.curr.y));
+        e.setBot(new IntPoint(e.next.curr.x, e.next.curr.y));
     }
     SetDx(e);
     e.polyTyp = polyType;
@@ -1260,13 +1254,12 @@ class ClipperBase {
     private InsertLocalMinima(newLm:LocalMinima):void {
         if ( this.m_MinimaList == null ) {
             this.m_MinimaList = newLm;
-        }
-        else if (newLm.y >= this.m_MinimaList.y ) {
+        } else if (newLm.y.greaterThanOrEqual(this.m_MinimaList.y)) {
             newLm.next = this.m_MinimaList;
             this.m_MinimaList = newLm;
         } else {
             let tmpLm = this.m_MinimaList;
-            while (tmpLm.next != null && newLm.y < tmpLm.next.y) {
+            while (tmpLm.next != null && newLm.y.lessThan(tmpLm.next.y)) {
                 tmpLm = tmpLm.next;
             }
             newLm.next = tmpLm.next;
@@ -1276,8 +1269,7 @@ class ClipperBase {
 
     protected PopLocalMinima(Y:Int64):LocalMinima {
         let current = this.m_CurrentLM;
-        if (this.m_CurrentLM != null && this.m_CurrentLM.y == Y)
-        {
+        if (this.m_CurrentLM != null && this.m_CurrentLM.y.equals(Y)) {
             this.m_CurrentLM = this.m_CurrentLM.next;
             return current;
         }
@@ -1402,12 +1394,12 @@ class ClipperBase {
             let e = lm.leftBound;
 
             if (e != null) {
-                e.setCurr(e.bot);
+                e.setCurr(new IntPoint(e.bot.x, e.bot.y));
                 e.outIdx = Unassigned;
             }
             e = lm.rightBound;
             if (e != null) {
-                e.setCurr(e.bot);
+                e.setCurr(new IntPoint(e.bot.x, e.bot.y));
                 e.outIdx = Unassigned;
             }
             lm = lm.next;
@@ -1418,20 +1410,15 @@ class ClipperBase {
     protected InsertScanbeam(Y:Int64):void {
         //single-linked list: sorted descending, ignoring dups.
         if (this.m_Scanbeam == null) {
-            this.m_Scanbeam = new Scanbeam();
-            this.m_Scanbeam.next = null;
-            this.m_Scanbeam.y = Y;
-        } else if (Y > this.m_Scanbeam.y) {
-            let newSb = new Scanbeam();
-            newSb.y = Y;
-            newSb.next = this.m_Scanbeam;
+            this.m_Scanbeam = new Scanbeam(Y);
+        } else if (Y.greaterThan(this.m_Scanbeam.y)) {
+            let newSb = new Scanbeam(Y);
             this.m_Scanbeam = newSb;
         } else {
             let sb2 = this.m_Scanbeam;
             while (sb2.next != null && Y.lessThanOrEqual(sb2.next.y)) sb2 = sb2.next;
             if (Y.equals(sb2.y)) return; //ie ignores duplicates
-            let newSb = new Scanbeam();
-            newSb.y = Y;
+            let newSb = new Scanbeam(Y);
             newSb.next = sb2.next;
             sb2.next = newSb;
         }
@@ -1469,7 +1456,7 @@ class ClipperBase {
         }
         let Y = this.m_Scanbeam.y;
         this.m_Scanbeam = this.m_Scanbeam.next;
-        return {Y:Y, r:false};
+        return {Y:Y, r:true};
     }
     
 
@@ -1508,7 +1495,7 @@ class ClipperBase {
         e.nextInLML.windCnt = e.windCnt;
         e.nextInLML.windCnt2 = e.windCnt2;
         e = e.nextInLML;
-        e.setCurr(e.bot);
+        e.setCurr(new IntPoint(e.bot.x, e.bot.y));
         e.prevInAEL = AelPrev;
         e.nextInAEL = AelNext;
         if (!IsHorizontal(e)) {
