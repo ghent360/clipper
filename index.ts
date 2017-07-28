@@ -75,6 +75,13 @@ function main(argv:string[]):void {
             console.log(`Subject has ${values[0].length} polys`);
             console.log(`Clip has ${values[1].length} polys`);
             console.log(`Solution has ${solution.length} polys`);
+            let idx = 0;
+            for (let p of solution) {
+                console.log(`Poly (${idx++}`);
+                for (let pt of p) {
+                    console.log(`  ${pt.x.toNumber()}, ${pt.y.toNumber()}`);
+                }
+            }
         });
     })
     .then(() => console.log("done"), (reason) => console.log(`fail: ${reason}`));

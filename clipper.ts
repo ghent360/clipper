@@ -1413,6 +1413,7 @@ class ClipperBase {
             this.m_Scanbeam = new Scanbeam(Y);
         } else if (Y.greaterThan(this.m_Scanbeam.y)) {
             let newSb = new Scanbeam(Y);
+            newSb.next = this.m_Scanbeam;
             this.m_Scanbeam = newSb;
         } else {
             let sb2 = this.m_Scanbeam;
