@@ -965,7 +965,7 @@ function PointCount(pts:OutPt):number {
 
 function DupOutPt(outPt:OutPt, insertAfter:boolean):OutPt {
     let result = new OutPt();
-    result.pt = outPt.pt;
+    result.pt = new IntPoint(outPt.pt.x, outPt.pt.y);
     result.idx = outPt.idx;
     if (insertAfter) {
         result.next = outPt.next;
@@ -2474,7 +2474,7 @@ export class Clipper extends ClipperBase {
             let newOp = new OutPt();
             outRec.pts = newOp;
             newOp.idx = outRec.idx;
-            newOp.pt = pt;
+            newOp.pt = new IntPoint(pt.x, pt.y);
             newOp.next = newOp;
             newOp.prev = newOp;
             if (!outRec.isOpen) {
@@ -2495,7 +2495,7 @@ export class Clipper extends ClipperBase {
 
             let newOp = new OutPt();
             newOp.idx = outRec.idx;
-            newOp.pt = pt;
+            newOp.pt = new IntPoint(pt.x, pt.y);
             newOp.next = op;
             newOp.prev = op.prev;
             newOp.prev.next = newOp;
@@ -3366,7 +3366,7 @@ export class Clipper extends ClipperBase {
         let lastPP = pp.prev;
         while (pp != lastPP) {
             pp = pp.next;
-            if (pp.pt == pp.prev.pt) {
+            if (pp.pt.equals(pp.prev.pt)) {
                 if (pp == lastPP) {
                     lastPP = pp.prev;
                 }
@@ -3394,8 +3394,8 @@ export class Clipper extends ClipperBase {
                 return;
             }
             //test for duplicate points and collinear edges ...
-            if (pp.pt == pp.next.pt
-                || pp.pt == pp.prev.pt
+            if (pp.pt.equals(pp.next.pt)
+                || pp.pt.equals(pp.prev.pt)
                 || (SlopesEqual3P(pp.prev.pt, pp.pt, pp.next.pt, this.m_UseFullRange)
                     && (!preserveCol || !Pt2IsBetweenPt1AndPt3(pp.prev.pt, pp.pt, pp.next.pt)))) {
                 lastOK = null;
@@ -3440,7 +3440,7 @@ export class Clipper extends ClipperBase {
             op1b = DupOutPt(op1, !DiscardLeft);
             if (op1b.pt.notEquals(Pt)) {
                 op1 = op1b;
-                op1.pt = Pt;
+                op1.pt = new IntPoint(Pt.x, Pt.y);
                 op1b = DupOutPt(op1, !DiscardLeft);
             }
         } else {
@@ -3455,7 +3455,7 @@ export class Clipper extends ClipperBase {
             op1b = DupOutPt(op1, DiscardLeft);
             if (op1b.pt.notEquals(Pt)) {
                 op1 = op1b;
-                op1.pt = Pt;
+                op1.pt = new IntPoint(Pt.x, Pt.y);
                 op1b = DupOutPt(op1, DiscardLeft);
             }
         }
@@ -3472,7 +3472,7 @@ export class Clipper extends ClipperBase {
             op2b = DupOutPt(op2, !DiscardLeft);
             if (op2b.pt.notEquals(Pt)) {
                 op2 = op2b;
-                op2.pt = Pt;
+                op2.pt = new IntPoint(Pt.x, Pt.y);
                 op2b = DupOutPt(op2, !DiscardLeft);
             }
         } else {
@@ -3487,7 +3487,7 @@ export class Clipper extends ClipperBase {
             op2b = DupOutPt(op2, DiscardLeft);
             if (op2b.pt.notEquals(Pt)) {
                 op2 = op2b;
-                op2.pt = Pt;
+                op2.pt = new IntPoint(Pt.x, Pt.y);
                 op2b = DupOutPt(op2, DiscardLeft);
             }
         }
@@ -3933,7 +3933,7 @@ export class Clipper extends ClipperBase {
         }
 
         for (let i = 0; i < cnt; ++i) {
-            outPts[i].pt = path[i];
+            outPts[i].pt = new IntPoint(path[i].x, path[i].y);
             outPts[i].next = outPts[(i + 1) % cnt];
             outPts[i].next.prev = outPts[i];
             outPts[i].idx = 0;
