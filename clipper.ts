@@ -111,38 +111,21 @@ enum NodeType {
 }
 
 export class IntPoint {
-    private x_:Int64;
-    private y_:Int64;
-
-    constructor(x:Int64, y:Int64) {
-        this.x_ = x;
-        this.y_ = y;
-    }
-
-    public get x() {
-        return this.x_;
-    }
-
-    public get y() {
-        return this.y_;
+    constructor(readonly x:Int64, readonly y:Int64) {
     }
 
     public equals(other:IntPoint): boolean {
-        return this.x_.equals(other.x_)
-            && this.y_.equals(other.y_);
+        return this.x.equals(other.x)
+            && this.y.equals(other.y);
     }
 
     public notEquals(other:IntPoint): boolean {
-        return this.x_.notEquals(other.x_)
-            || this.y_.notEquals(other.y_);
-    }
-
-    public static fromDoubles(x:number, y:number):IntPoint {
-        return new IntPoint(Int64.fromNumber(x), Int64.fromNumber(y));
+        return this.x.notEquals(other.x)
+            || this.y.notEquals(other.y);
     }
 
     public static copy(other:IntPoint):IntPoint {
-        return new IntPoint(other.x_, other.y_);
+        return new IntPoint(other.x, other.y);
     }
 }
 
@@ -256,10 +239,10 @@ export class PolyTree extends PolyNode {
 }
 
 class TEdge {
-    private bot_:IntPoint;
-    private curr_:IntPoint; //current (updated for every new scanbeam)
-    private top_:IntPoint;
-    private delta_:IntPoint;
+    public bot:IntPoint;
+    public curr:IntPoint; //current (updated for every new scanbeam)
+    public top:IntPoint;
+    public delta:IntPoint;
 
     public dx:number;
     public polyTyp:PolyType;
@@ -279,38 +262,6 @@ class TEdge {
 
     public nextInSEL:TEdge = null;
     public prevInSEL:TEdge = null;
-
-    public get bot():IntPoint {
-        return this.bot_;
-    }
-
-    public get top():IntPoint {
-        return this.top_;
-    }
-
-    public get curr():IntPoint {
-        return this.curr_;
-    }
-
-    public get delta():IntPoint {
-        return this.delta_;
-    }
-
-    public setTop(v:IntPoint):void {
-        this.top_ = v;
-    }
-
-    public setBot(v:IntPoint):void {
-        this.bot_ = v;
-    }
-
-    public setCurr(v:IntPoint):void {
-        this.curr_ = v;
-    }
-
-    public setDelta(v:IntPoint):void {
-        this.delta_ = v;
-    }
 }
 
 class IntersectNode {
@@ -322,32 +273,20 @@ class IntersectNode {
 
 class LocalMinima {
     public next:LocalMinima;
-    private leftBound_:TEdge;
-    private rightBound_:TEdge;
 
     constructor(
         readonly y:Int64,
-        leftBound:TEdge,
-        rightBound:TEdge) {
-        this.leftBound_ = leftBound;
-        this.rightBound_ = rightBound;
+        public leftBound:TEdge,
+        public rightBound:TEdge) {
         this.next = null;
     }
 
-    public get leftBound():TEdge {
-        return this.leftBound_;
-    }
-
-    public get rightBound():TEdge {
-        return this.rightBound_;
-    }
-
     public clearLeftBound():void {
-        this.leftBound_ = null;
+        this.leftBound = null;
     }
 
     public clearRightBound():void {
-        this.rightBound_ = null;
+        this.rightBound = null;
     }
 }
 
@@ -515,7 +454,7 @@ function RangeTest(pt:IntPoint, useFullRange:boolean):boolean {
 function SetDx(e:TEdge):void {
     let dx = e.top.x.sub(e.bot.x);
     let dy = e.top.y.sub(e.bot.y);
-    e.setDelta(new IntPoint(dx, dy));
+    e.delta = new IntPoint(dx, dy);
     if (dy.isZero()) {
         e.dx = Horizontal;
     } else {
@@ -527,17 +466,17 @@ function InitEdge(
     e:TEdge, eNext:TEdge, ePrev:TEdge, pt:IntPoint):void {
     e.next = eNext;
     e.prev = ePrev;
-    e.setCurr(new IntPoint(pt.x, pt.y));
+    e.curr = new IntPoint(pt.x, pt.y);
     e.outIdx = Unassigned;
 }
 
 function InitEdge2(e:TEdge, polyType:PolyType):void {
     if (e.curr.y.greaterThanOrEqual(e.next.curr.y)) {
-        e.setBot(new IntPoint(e.curr.x, e.curr.y));
-        e.setTop(new IntPoint(e.next.curr.x, e.next.curr.y));
+        e.bot = new IntPoint(e.curr.x, e.curr.y);
+        e.top = new IntPoint(e.next.curr.x, e.next.curr.y);
     } else {
-        e.setTop(new IntPoint(e.curr.x, e.curr.y));
-        e.setBot(new IntPoint(e.next.curr.x, e.next.curr.y));
+        e.top = new IntPoint(e.curr.x, e.curr.y);
+        e.bot = new IntPoint(e.next.curr.x, e.next.curr.y);
     }
     SetDx(e);
     e.polyTyp = polyType;
@@ -595,9 +534,8 @@ function ReverseHorizontal(e:TEdge):void {
     //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
     let top = new IntPoint(e.bot.x, e.top.y);
     let bot = new IntPoint(e.top.x, e.bot.y);
-    //Int64.Swap(e.top.x, e.bot.x);
-    e.setTop(top);
-    e.setBot(bot);
+    e.top = top;
+    e.bot = bot;
 }
 
 function TopX(edge:TEdge, currentY:Int64):Int64 {
@@ -1394,12 +1332,12 @@ class ClipperBase {
             let e = lm.leftBound;
 
             if (e != null) {
-                e.setCurr(new IntPoint(e.bot.x, e.bot.y));
+                e.curr = new IntPoint(e.bot.x, e.bot.y);
                 e.outIdx = Unassigned;
             }
             e = lm.rightBound;
             if (e != null) {
-                e.setCurr(new IntPoint(e.bot.x, e.bot.y));
+                e.curr = new IntPoint(e.bot.x, e.bot.y);
                 e.outIdx = Unassigned;
             }
             lm = lm.next;
@@ -1496,7 +1434,7 @@ class ClipperBase {
         e.nextInLML.windCnt = e.windCnt;
         e.nextInLML.windCnt2 = e.windCnt2;
         e = e.nextInLML;
-        e.setCurr(new IntPoint(e.bot.x, e.bot.y));
+        e.curr = new IntPoint(e.bot.x, e.bot.y);
         e.prevInAEL = AelPrev;
         e.nextInAEL = AelNext;
         if (!IsHorizontal(e)) {
@@ -1599,7 +1537,7 @@ class ClipperBase {
         let IsFlat = true;
 
         //1. Basic (first) edge initialization ...
-        edges[1].setCurr(pg[1]);
+        edges[1].curr = pg[1];
         this.m_UseFullRange = RangeTest(pg[0], this.m_UseFullRange);
         this.m_UseFullRange = RangeTest(pg[highI], this.m_UseFullRange);
         InitEdge(edges[0], edges[1], edges[highI], pg[0]);
@@ -3089,7 +3027,7 @@ export class Clipper extends ClipperBase {
         while (e != null) {
             e.prevInSEL = e.prevInAEL;
             e.nextInSEL = e.nextInAEL;
-            e.setCurr(new IntPoint(TopX(e, topY), e.curr.y));
+            e.curr = new IntPoint(TopX(e, topY), e.curr.y);
             e = e.nextInAEL;
         }
 
@@ -3190,7 +3128,7 @@ export class Clipper extends ClipperBase {
                     }
                     this.AddEdgeToSEL(e);
                 } else {
-                    e.setCurr(new IntPoint(TopX(e, topY), topY));
+                    e.curr = new IntPoint(TopX(e, topY), topY);
                 }
                 //When StrictlySimple and 'e' is being touched by another edge, then
                 //make sure both edges have a vertex here ...

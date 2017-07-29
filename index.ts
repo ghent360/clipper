@@ -15,7 +15,7 @@ if (!String.prototype.format) {
     };
 }
 
-function parseWrl(content:string[]):c.Paths {
+function parseWlr(content:string[]):c.Paths {
     let i = Number.parseInt(content[0]);
     if (i != 1) {
         throw new Error(`"First digit should be 1, got ${i}`);
@@ -45,7 +45,7 @@ function parseWrl(content:string[]):c.Paths {
     return result;
 }
 
-function readWrlFile(fileName:string):Promise<c.Paths> {
+function readWlrFile(fileName:string):Promise<c.Paths> {
     return new Promise((resolve, reject) => {
         try {
             fs.readFile(fileName, (err, buffer) => {
@@ -57,13 +57,30 @@ function readWrlFile(fileName:string):Promise<c.Paths> {
         }
     })
     .then(buffer => buffer.toString().split('\n'))
-    .then(content => parseWrl(content));
+    .then(content => parseWlr(content));
+}
+
+function writeWlr(stream:fs.WriteStream, paths:c.Paths):void {
+    stream.write("1\n");
+    stream.write(`${paths.length}\n`);
+    for (let path of paths) {
+        stream.write(`${path.length}\n`);
+        for (let pt of path) {
+            stream.write(`${pt.x.toNumber()},${pt.y.toNumber()}\n`);
+        }
+    }
+}
+
+function writeWlrFile(fileName:string, paths:c.Paths):void {
+    let stream = fs.createWriteStream(fileName);
+    writeWlr(stream, paths);
+    stream.end();
 }
 
 function main(argv:string[]):void {
     Int64.init().then(() => {
-        let subjPromise = readWrlFile(argv[2]);
-        let clipPromise = readWrlFile(argv[3]);
+        let subjPromise = readWlrFile(argv[2]);
+        let clipPromise = readWlrFile(argv[3]);
         return Promise.all([subjPromise, clipPromise]).then(values => {
             let ct = c.ClipType.ctIntersection;
             let clipper = new c.Clipper();
@@ -75,13 +92,7 @@ function main(argv:string[]):void {
             console.log(`Subject has ${values[0].length} polys`);
             console.log(`Clip has ${values[1].length} polys`);
             console.log(`Solution has ${solution.length} polys`);
-            let idx = 0;
-            for (let p of solution) {
-                console.log(`Poly (${idx++}`);
-                for (let pt of p) {
-                    console.log(`  ${pt.x.toNumber()}, ${pt.y.toNumber()}`);
-                }
-            }
+            writeWlrFile("solution.wlr", solution);
         });
     })
     .then(() => console.log("done"), (reason) => console.log(`fail: ${reason}`));
