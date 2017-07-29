@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as readline from "readline";
 import * as c from "./clipper";
 import {Int64} from "./intMath/int64";
+import {SVGBuilder} from "./svgbuilder";
 
 function parseWlr(content:string[]):c.Paths {
     let i = Number.parseInt(content[0]);
@@ -81,6 +82,11 @@ function main(argv:string[]):void {
             console.log(`Clip has ${values[1].length} polys`);
             console.log(`Solution has ${solution.length} polys`);
             writeWlrFile("solution.wlr", solution);
+            let sb = new SVGBuilder();
+            sb.AddPaths(solution);
+            let stream = fs.createWriteStream("solution.svg");
+            sb.SaveToSVG(stream);
+            stream.end();
         });
     })
     .then(() => console.log("done"), (reason) => console.log(`fail: ${reason}`));

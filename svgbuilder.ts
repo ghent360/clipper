@@ -71,7 +71,7 @@ const poly_end:string[] = [
     "; stroke-width:",
     ";\"/>\n\n"];
 
-class SVGBuilder {
+export class SVGBuilder {
     public style:StyleInfo;
     private PolyInfoList:Array<PolyInfo>;
 
@@ -218,6 +218,5 @@ class SVGBuilder {
             }
         }
         file.write("</svg>\n");
-        file.end();
     }
 }
