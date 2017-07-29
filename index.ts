@@ -3,18 +3,6 @@ import * as readline from "readline";
 import * as c from "./clipper";
 import {Int64} from "./intMath/int64";
 
-// First, checks if it isn't implemented yet.
-if (!String.prototype.format) {
-    String.prototype.format = function() {
-        let args = arguments;
-        return this.replace(/{(\d+)}/g, function(match, number) { 
-            return typeof args[number] != 'undefined'
-                ? args[number]
-                : match
-            ;});
-    };
-}
-
 function parseWlr(content:string[]):c.Paths {
     let i = Number.parseInt(content[0]);
     if (i != 1) {
