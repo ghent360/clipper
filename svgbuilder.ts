@@ -48,8 +48,29 @@ class StyleInfo {
     }
 }
 
+interface Point {
+    x:number;
+    y:number;
+}
+
+function convertPath(path:c.Path):Array<Point> {
+    let result = new Array<Point>();
+    for (let pt of path) {
+        result.push({x:pt.x.toNumber(), y:pt.y.toNumber()});
+    }
+    return result;
+}
+
+function convertPaths(paths:c.Paths):Array<Array<Point>> {
+    let result = new Array<Array<Point>>();
+    for (let path of paths) {
+        result.push(convertPath(path));
+    }
+    return result;
+}
+
 class PolyInfo {
-    public polygons:c.Paths;
+    public polygons:Array<Array<Point>>;
     public si:StyleInfo;
 }
 
@@ -81,6 +102,13 @@ export class SVGBuilder {
     }
 
     public AddPaths(poly:c.Paths):void {
+        if (poly.length == 0) {
+            return;
+        }
+        this.Add(convertPaths(poly));
+    }
+
+    public Add(poly:Array<Array<Point>>):void {
         if (poly.length == 0) {
             return;
         }
@@ -117,14 +145,14 @@ export class SVGBuilder {
             for (let j = 0; j < this.PolyInfoList[i].polygons.length; ++j) {
                 for (let k = 0; k < this.PolyInfoList[i].polygons[j].length; ++k) {
                     let ip = this.PolyInfoList[i].polygons[j][k];
-                    if (ip.x.lessThan(left)) {
+                    if (ip.x < left) {
                         left = ip.x;
-                    } else if (ip.x.greaterThan(right)) {
+                    } else if (ip.x > right) {
                         right = ip.x;
                     }
-                    if (ip.y.lessThan(top)) {
+                    if (ip.y < top) {
                         top = ip.y;
-                    } else if (ip.y.greaterThan(bottom)) {
+                    } else if (ip.y > bottom) {
                         bottom = ip.y;
                     }
                 }
@@ -137,13 +165,12 @@ export class SVGBuilder {
         if (margin < 0) {
             margin = 0;
         }
-        let _left = left.toNumber() * scale;
-        let _top = top.toNumber() * scale;
-        let _right = right.toNumber() * scale;
-        let _bottom = bottom.toNumber() * scale;
+        let _left = left * scale;
+        let _top = top * scale;
+        let _right = right * scale;
+        let _bottom = bottom * scale;
         let offsetX = -_left + margin;
         let offsetY = -_top + margin;
-        let rec = new c.IntRect(left, top, right, bottom);
 
         file.write(svg_header[0]);
         file.write((_right - _left + margin*2).toString());
@@ -165,14 +192,14 @@ export class SVGBuilder {
                 }
                 file.write(" M ");
                 file.write( 
-                    (this.PolyInfoList[i].polygons[j][0].x.toNumber() * scale + offsetX).toString());
+                    (this.PolyInfoList[i].polygons[j][0].x * scale + offsetX).toString());
                 file.write(" ");
                 file.write(
-                    (this.PolyInfoList[i].polygons[j][0].x.toNumber() * scale + offsetY).toString());
+                    (this.PolyInfoList[i].polygons[j][0].x * scale + offsetY).toString());
                 for (let k = 1; k < this.PolyInfoList[i].polygons[j].length; ++k) {
                     let ip = this.PolyInfoList[i].polygons[j][k];
-                    let x = ip.x.toNumber() * scale;
-                    let y = ip.y.toNumber() * scale;
+                    let x = ip.x * scale;
+                    let y = ip.y * scale;
                     file.write(" L ");
                     file.write((x + offsetX).toString());
                     file.write(" ");
@@ -204,13 +231,13 @@ export class SVGBuilder {
                     for (let k = 0; k < this.PolyInfoList[i].polygons[j].length; ++k) {
                         let ip = this.PolyInfoList[i].polygons[j][k];
                         file.write("<text x=\"");
-                        file.write(Math.trunc(ip.x.toNumber() * scale + offsetX).toString());
+                        file.write(Math.trunc(ip.x * scale + offsetX).toString());
                         file.write("\" y=\"");
-                        file.write(Math.trunc(ip.y.toNumber() * scale + offsetY).toString());
+                        file.write(Math.trunc(ip.y * scale + offsetY).toString());
                         file.write("\">");
-                        file.write(ip.x.toNumber().toString());
+                        file.write(ip.x.toString());
                         file.write(",");
-                        file.write(ip.y.toNumber().toString());
+                        file.write(ip.y.toString());
                         file.write("</text>\n\n");
                     }
                 }
