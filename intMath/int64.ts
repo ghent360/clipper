@@ -90,17 +90,23 @@ export class Int64 {
     }
     
     public add(b: Int64|number): Int64 {
-        if (b instanceof Int64) {
-            return LongIntImpl.function64_64_64(this, b, "add64");
+        if (typeof b === "number") {
+            if (Math.trunc(b) != b) {
+                return Int64.fromRoundNumber(this.toNumber() + b);
+            }
+            b = Int64.fromRoundNumber(b);
         }
-        return Int64.fromRoundNumber(this.toNumber() + b);
+        return LongIntImpl.function64_64_64(this, b, "add64");
     }
 
     public sub(b: Int64|number): Int64 {
-        if (b instanceof Int64) {
-            return LongIntImpl.function64_64_64(this, b, "sub64");
+        if (typeof b === "number") {
+            if (Math.trunc(b) != b) {
+                return Int64.fromRoundNumber(this.toNumber() - b);
+            }
+            b = Int64.fromRoundNumber(b);
         }
-        return Int64.fromRoundNumber(this.toNumber() - b);
+        return LongIntImpl.function64_64_64(this, b, "sub64");
     }
 
     public subtract(b: Int64): Int64 {
@@ -108,10 +114,13 @@ export class Int64 {
     }
 
     public mul(b: Int64|number): Int64 {
-        if (b instanceof Int64) {
-            return LongIntImpl.function64_64_64(this, b, "mul64");
+        if (typeof b === "number") {
+            if (Math.trunc(b) != b) {
+                return Int64.fromRoundNumber(this.toNumber() * b);
+            }
+            b = Int64.fromRoundNumber(b);
         }
-        return Int64.fromRoundNumber(this.toNumber() * b);
+        return LongIntImpl.function64_64_64(this, b, "mul64");
     }
 
     public multiply(b: Int64): Int64 {
@@ -119,10 +128,13 @@ export class Int64 {
     }
 
     public div(b: Int64|number): Int64 {
-        if (b instanceof Int64) {
-            return LongIntImpl.function64_64_64(this, b, "divs64");
+        if (typeof b === "number") {
+            if (Math.trunc(b) != b) {
+                return Int64.fromRoundNumber(this.toNumber() / b);
+            }
+            b = Int64.fromRoundNumber(b);
         }
-        return Int64.fromRoundNumber(this.toNumber() / b);
+        return LongIntImpl.function64_64_64(this, b, "divs64");
     }
 
     public divide(b: Int64): Int64 {
@@ -329,11 +341,12 @@ export class Int64 {
     }
 
     public static Swap(one:Int64, other:Int64):void {
-        let tmp = one.clone();
+        let tmpl = one.low_;
+        let tmph = one.high_;
         one.low_ = other.low_;
         one.high_ = other.high_;
-        other.low_ = tmp.low_;
-        other.high_ = tmp.high_;
+        other.low_ = tmpl;
+        other.high_ = tmph;
     }
 
     public static max(a:Int64, b:Int64):Int64 {
@@ -508,11 +521,8 @@ export class Int128 {
         return LongIntImpl.function128_128_128(this, b, "mul128");
     }
 
-    public multiply(b: Int128|number): Int128 {
-        if (b instanceof Int128) {
-            return this.mul(b);
-        }
-        return Int128.fromRoundNumber(this.toNumber() * b);
+    public multiply(b: Int128): Int128 {
+        return this.mul(b);
     }
 
     public shiftLeft(numBits:number):Int128 {
@@ -798,7 +808,7 @@ class LongIntImpl {
         let fs = require('fs');
         return new Promise((resolve, reject) => {
                 try {
-                    fs.readFile(url, (err, buffer) => {
+                    fs.readFile(url, (err:NodeJS.ErrnoException, buffer:Buffer) => {
                         if (err) reject(err);
                         else resolve(buffer);
                     });
@@ -806,7 +816,7 @@ class LongIntImpl {
                     reject(err);
                 }
             })
-            .then(bytes => WebAssembly.instantiate(bytes, undefined))
+            .then((bytes:Buffer) => WebAssembly.instantiate(bytes.buffer, undefined))
             .then(results => results.instance);
     }
 }

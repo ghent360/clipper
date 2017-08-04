@@ -208,4 +208,15 @@ describe("Int128 tests", () => {
         let r = carryTest.mul(carryTest);
         assert.deepEqual(r, new Int128(1, 0, 0xffffffff, 0x3fffffff));
     });
+    it("Float conversion test", () => {
+        let n = Math.PI;
+        let c = Int64.fromNumber(n);
+        assert.deepEqual(c, Int64.fromInt(3));
+    });
+    it("Float operations test", () => {
+        let n = Int64.fromInt(1000);
+        let f = 20000000000;
+        assert.deepEqual(n.mul(3.5), Int64.fromInt(3500));
+        assert.deepEqual(n.mul(f), Int64.fromNumber(2E13));
+    });
 });
