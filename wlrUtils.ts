@@ -67,6 +67,14 @@ function ptIdx(pt:c.Point):string {
     return pt.x + ":" + pt.y;
 }
 
+function idxPt(idx:string):c.Point {
+    let s = idx.split(':');
+    return new c.Point(
+        Number.parseFloat(s[0]),
+        Number.parseFloat(s[1])
+    );
+}
+
 function ptIdxRound(pt:c.Point):string {
     return Math.round(pt.x) + ":" + Math.round(pt.y);
 }
@@ -84,12 +92,25 @@ export function diffPath(a:c.Path, b:c.Path):void {
         let idx = ptIdx(pt);
         let idxRnd = ptIdxRound(pt);
         if (firstPath[idx] == undefined) {
-            console.log(`Missing ${pt.x}, ${pt.y}`);
-            if (firstPathRnd[idxRnd]) {
-                console.log(`  but have ${Math.round(pt.x)}, ${Math.round(pt.y)}`);
+            console.log(`First is missing ${pt.x}, ${pt.y}`);
+            if (firstPathRnd[idxRnd] != undefined) {
+                console.log(`  but has ${Math.round(pt.x)}, ${Math.round(pt.y)}`);
             }
         } else {
             firstPath[idx] = false;
+        }
+        if (firstPathRnd[idxRnd] != undefined) {
+            firstPathRnd[idxRnd] = false;
+        }
+    }
+    for (let idx in firstPath) {
+        if (firstPath[idx]) {
+            let pt = idxPt(idx);
+            let idxRnd = ptIdxRound(pt);
+            console.log(`Second is missing ${pt.x}, ${pt.y}`);
+            if (firstPathRnd[idxRnd] == false) {
+                console.log(`  but has ${Math.round(pt.x)}, ${Math.round(pt.y)}`);
+            }
         }
     }
 }
