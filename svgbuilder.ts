@@ -195,7 +195,7 @@ export class SVGBuilder {
                     (this.PolyInfoList[i].polygons[j][0].x * scale + offsetX).toString());
                 file.write(" ");
                 file.write(
-                    (this.PolyInfoList[i].polygons[j][0].x * scale + offsetY).toString());
+                    (this.PolyInfoList[i].polygons[j][0].y * scale + offsetY).toString());
                 for (let k = 1; k < this.PolyInfoList[i].polygons[j].length; ++k) {
                     let ip = this.PolyInfoList[i].polygons[j][k];
                     let x = ip.x * scale;
