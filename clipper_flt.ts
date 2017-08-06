@@ -129,7 +129,7 @@ export class Point {
     }
 }
 
-export class IntRect {
+export class Rect {
     constructor(
         readonly left:number,
         readonly top:number,
@@ -137,8 +137,8 @@ export class IntRect {
         readonly bottom:number) {
     }
 
-    public static copy(other:IntRect):IntRect {
-        return new IntRect(other.left, other.top, other.right, other.bottom);
+    public static copy(other:Rect):Rect {
+        return new Rect(other.left, other.top, other.right, other.bottom);
     }
 }
 
@@ -1313,7 +1313,7 @@ class ClipperBase {
         }
     }
 
-    public static GetBounds(paths:Paths):IntRect {
+    public static GetBounds(paths:Paths):Rect {
         let i = 0;
         let cnt = paths.length;
 
@@ -1321,7 +1321,7 @@ class ClipperBase {
             i++;
         }
         if (i == cnt) {
-            return new IntRect(0, 0, 0, 0);
+            return new Rect(0, 0, 0, 0);
         }
         let resultLeft = paths[i][0].x;
         let resultRight = resultLeft;
@@ -1342,7 +1342,7 @@ class ClipperBase {
                 }
             }
         }
-        return new IntRect(resultLeft, resultTop, resultRight, resultBottom);
+        return new Rect(resultLeft, resultTop, resultRight, resultBottom);
     }
 
     protected PopScanbeam():{Y:number, r:boolean} {

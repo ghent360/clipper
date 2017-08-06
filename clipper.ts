@@ -458,7 +458,8 @@ function SetDx(e:TEdge):void {
     if (dy.isZero()) {
         e.dx = Horizontal;
     } else {
-        e.dx = e.delta.x.div(e.delta.y).toNumber();
+        //e.dx = e.delta.x.div(e.delta.y).toNumber();
+        e.dx = e.delta.x.toNumber() / e.delta.y.toNumber();
     }
 }
 
