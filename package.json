@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@types/node": "^8.0.15",
-    "node": "0.0.0"
+    "node": "0.0.0",
+    "svg.js": "^2.6.3"
   }
 }

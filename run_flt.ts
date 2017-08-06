@@ -12,8 +12,10 @@ function main(argv:string[]):void {
         return Promise.all([subjPromise, clipPromise]).then(values => {
             let ct = c.ClipType.ctIntersection;
             let clipper = new c.Clipper();
-            clipper.AddPaths(values[0], c.PolyType.ptSubject, true);
-            clipper.AddPaths(values[1], c.PolyType.ptClip, true);
+            let subj = values[0].map(path => path.map(p => new c.Point(p.x, p.y)));
+            let clip = values[1].map(path => path.map(p => new c.Point(p.x, p.y)));
+            clipper.AddPaths(subj, c.PolyType.ptSubject, true);
+            clipper.AddPaths(clip, c.PolyType.ptClip, true);
             let solution = new Array<c.Path>();
             clipper.Execute(ct, solution, c.PolyFillType.pftEvenOdd);
             
