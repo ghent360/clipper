@@ -1,5 +1,4 @@
 import * as fs from "fs";
-import * as readline from "readline";
 import * as wlr from "./wlrUtils";
 
 function main(argv:string[]):void {

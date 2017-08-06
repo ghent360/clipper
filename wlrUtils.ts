@@ -1,14 +1,14 @@
 import * as fs from "fs";
 import * as readline from "readline";
 
-interface Point {
+export interface Point {
     x:number;
     y:number;
 }
-type Path=Array<Point>;
-type Paths=Array<Array<Point>>;
+export type Path=Array<Point>;
+export type Paths=Array<Array<Point>>;
 
-function parseWlr(content:string[]):Paths {
+export function parseWlr(content:string[]):Paths {
     let i = Number.parseInt(content[0]);
     if (i != 1) {
         throw new Error(`"First digit should be 1, got ${i}`);
