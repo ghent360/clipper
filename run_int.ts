@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as readline from "readline";
 import * as c from "./clipper";
-import {Int64} from "./intMath/int64";
+import {Int64} from "intmath/intmath";
 import {SVGBuilder} from "./svgbuilder";
 
 function parseWlr(content:string[]):c.Paths {

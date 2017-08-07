@@ -40,7 +40,7 @@
 *                                                                              *
 *******************************************************************************/
 
-import {Int64, Int128} from "./intMath/int64";
+import {Int64, Int128} from "intmath/intmath";
 
 export type Path=Array<IntPoint>;
 export type Paths=Array<Array<IntPoint>>;
