@@ -6,7 +6,7 @@
   "scripts": {
     "test": "mocha --opts mocha.opts"
   },
-  "author": "Venelin Efremov",
+  "author": "Venelin Efremov <ghent360@iqury.us>",
   "repository": {
     "type": "git",
     "url": "https://github.com/ghent360/clipper.git"
