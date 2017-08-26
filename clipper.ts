@@ -127,6 +127,10 @@ export class IntPoint {
     public static copy(other:IntPoint):IntPoint {
         return new IntPoint(other.x, other.y);
     }
+
+    public static fromXY(x:number, y:number):IntPoint {
+        return new IntPoint(Int64.fromRoundNumber(x), Int64.fromRoundNumber(y));
+    }
 }
 
 class DoublePoint {
