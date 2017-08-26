@@ -884,7 +884,7 @@ function Area(shape:OutPt|OutRec|Path):number {
     return AreaPoly(shape);
 }
 
-function Orientation(poly:Path):boolean
+export function Orientation(poly:Path):boolean
 {
     return Area(poly) >= 0;
 }
