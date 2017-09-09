@@ -48,7 +48,7 @@ class StyleInfo {
     }
 }
 
-interface Point {
+export interface Point {
     x:number;
     y:number;
 }
